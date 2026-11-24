@@ -157,7 +157,7 @@ fun App(vm: AssistantViewModel = viewModel()) {
             Text("Hey Dipesh mode", modifier = Modifier.weight(1f), fontSize = 14.sp)
             Switch(
                 checked = vm.handsFree,
-                onCheckedChange = { on -> if (on) withMic { vm.setHandsFree(true) } else vm.setHandsFree(false) }
+                onCheckedChange = { on -> if (on) withMic { vm.enableHandsFree(true) } else vm.enableHandsFree(false) }
             )
         }
 

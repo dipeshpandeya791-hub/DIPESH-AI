@@ -52,7 +52,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setHandsFree(on: Boolean) {
+    fun enableHandsFree(on: Boolean) {
         handsFree = on
         awaitingCommand = false
         if (on) {

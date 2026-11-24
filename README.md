@@ -2,7 +2,7 @@
 
 A JARVIS-style personal AI assistant for **Android**. Talk to it, type to it, or just say **"Hey Dipesh"**. It speaks back, remembers you, and can actually do things on your phone.
 
-Built with Kotlin and Jetpack Compose. The brain is Claude (Anthropic API) with tool use.
+Built with Kotlin and Jetpack Compose. The brain is **Google Gemini** (default, `gemini-3.8-flash`) with function calling. Anthropic Claude is available as an alternative in Settings.
 
 ## Features
 | Area | What it does |
@@ -21,7 +21,7 @@ Every push builds the app on GitHub:
 3. Copy `app-debug.apk` to your phone and install it (allow "install unknown apps").
 
 ## First run
-1. Open the app, tap **Settings**, paste your Anthropic API key (get one at console.anthropic.com), set your city and language, then Save.
+1. Open the app, tap **Settings**, choose the AI provider and paste your **Gemini API key** (free key at aistudio.google.com/apikey), set your city and language, then Save.
 2. Tap **Talk**, or switch on **Hey Dipesh mode** and say: *"Hey Dipesh, what's the weather?"*
 
 Without a key the app still works for time, date, battery, flashlight and opening apps.
@@ -45,7 +45,7 @@ app/src/main/java/com/dipesh/ai/
   Ui.kt, Hud.kt          screens and animated HUD
   AssistantViewModel.kt  listening / thinking / speaking state machine, wake word
   Voice.kt               speech recognition + text-to-speech
-  Brain.kt               Claude API with tool-use loop
+  Brain.kt               Gemini (default) and Claude APIs with tool-use loop
   Tools.kt               phone actions, notes, memory
   Services.kt            weather and news
   ReminderReceiver.kt    reminder notifications

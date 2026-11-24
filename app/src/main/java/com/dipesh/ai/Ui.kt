@@ -218,6 +218,8 @@ private val LANGUAGES = listOf("English" to "en-US", "नेपाली (Nepali
 
 @Composable
 private fun SettingsDialog(vm: AssistantViewModel, onClose: () -> Unit) {
+    var provider by remember { mutableStateOf(vm.store.provider) }
+    var geminiKey by remember { mutableStateOf(vm.store.geminiKey) }
     var key by remember { mutableStateOf(vm.store.apiKey) }
     var city by remember { mutableStateOf(vm.store.city) }
     var lang by remember { mutableStateOf(vm.store.language) }
@@ -228,9 +230,25 @@ private fun SettingsDialog(vm: AssistantViewModel, onClose: () -> Unit) {
         title = { Text("Settings") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("AI provider", fontWeight = FontWeight.Bold)
+                listOf("Google Gemini" to Store.GEMINI, "Anthropic Claude" to Store.CLAUDE).forEach { (label, code) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { provider = code },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = provider == code, onClick = { provider = code })
+                        Text(label)
+                    }
+                }
+                OutlinedTextField(
+                    value = geminiKey, onValueChange = { geminiKey = it },
+                    label = { Text("Gemini API key") },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
                 OutlinedTextField(
                     value = key, onValueChange = { key = it },
-                    label = { Text("Anthropic API key") },
+                    label = { Text("Anthropic API key (optional)") },
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true, modifier = Modifier.fillMaxWidth()
                 )
@@ -258,7 +276,7 @@ private fun SettingsDialog(vm: AssistantViewModel, onClose: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = { vm.saveSettings(key, city, lang); onClose() }) { Text("Save") }
+            TextButton(onClick = { vm.saveSettings(provider, geminiKey, key, city, lang); onClose() }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } }
     )

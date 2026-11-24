@@ -14,6 +14,18 @@ class Store(context: Context) {
         get() = p.getString("api_key", "") ?: ""
         set(v) = p.edit().putString("api_key", v.trim()).apply()
 
+    var provider: String
+        get() = p.getString("provider", GEMINI) ?: GEMINI
+        set(v) = p.edit().putString("provider", v).apply()
+
+    var geminiKey: String
+        get() = p.getString("gemini_key", "") ?: ""
+        set(v) = p.edit().putString("gemini_key", v.trim()).apply()
+
+    var geminiModel: String
+        get() = p.getString("gemini_model", DEFAULT_GEMINI_MODEL) ?: DEFAULT_GEMINI_MODEL
+        set(v) = p.edit().putString("gemini_model", v.trim().ifEmpty { DEFAULT_GEMINI_MODEL }).apply()
+
     var model: String
         get() = p.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
         set(v) = p.edit().putString("model", v.trim().ifEmpty { DEFAULT_MODEL }).apply()
@@ -73,5 +85,8 @@ class Store(context: Context) {
 
     companion object {
         const val DEFAULT_MODEL = "claude-sonnet-5-5"
+        const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+        const val GEMINI = "gemini"
+        const val CLAUDE = "claude"
     }
 }

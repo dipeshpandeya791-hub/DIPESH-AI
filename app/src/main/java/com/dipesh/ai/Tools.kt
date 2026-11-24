@@ -55,6 +55,28 @@ class Tools(context: Context, private val store: Store) {
             mapOf("number" to ("string" to "Phone number.")), listOf("number")))
     }
 
+    /** Same tools in Gemini's functionDeclarations format. */
+    fun geminiDeclarations(): JSONArray {
+        val src = schema()
+        val out = JSONArray()
+        for (i in 0 until src.length()) {
+            val tool = src.getJSONObject(i)
+            val decl = JSONObject()
+                .put("name", tool.getString("name"))
+                .put("description", tool.getString("description"))
+            val inputSchema = tool.getJSONObject("input_schema")
+            val props = inputSchema.getJSONObject("properties")
+            if (props.length() > 0) { // Gemini rejects empty parameter objects
+                val params = JSONObject().put("type", "object").put("properties", props)
+                val req = inputSchema.getJSONArray("required")
+                if (req.length() > 0) params.put("required", req)
+                decl.put("parameters", params)
+            }
+            out.put(decl)
+        }
+        return out
+    }
+
     private fun def(
         name: String,
         desc: String,

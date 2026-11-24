@@ -8,77 +8,144 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Claude-powered brain with a tool-use loop so it can act on the phone. */
+/** The AI brain. Supports Google Gemini (default) and Anthropic Claude, both with tool use. */
 class Brain(private val store: Store, private val tools: Tools) {
 
     suspend fun reply(history: List<ChatMsg>): String = withContext(Dispatchers.IO) {
-        if (store.apiKey.isBlank()) {
-            return@withContext "My AI brain is offline. Open settings and paste your Anthropic API key. " +
+        val gemini = store.provider == Store.GEMINI
+        val key = if (gemini) store.geminiKey else store.apiKey
+        if (key.isBlank()) {
+            val which = if (gemini) "Gemini" else "Anthropic"
+            return@withContext "My AI brain is offline. Open settings and paste your $which API key. " +
                 "Until then I can still tell the time, open apps, and control the flashlight."
         }
         try {
-            val msgs = JSONArray()
-            history.takeLast(20).dropWhile { it.role != "user" }.forEach {
-                msgs.put(JSONObject().put("role", it.role).put("content", it.text))
-            }
-            var rounds = 0
-            while (rounds++ < 6) {
-                val body = JSONObject()
-                    .put("model", store.model)
-                    .put("max_tokens", 700)
-                    .put("system", systemPrompt())
-                    .put("tools", tools.schema())
-                    .put("messages", msgs)
-                val (code, text) = Http.postJson(
-                    API_URL,
-                    mapOf("x-api-key" to store.apiKey, "anthropic-version" to "2023-06-01"),
-                    body.toString()
-                )
-                if (code !in 200..299) return@withContext apiError(code, text)
-
-                val resp = JSONObject(text)
-                val content = resp.getJSONArray("content")
-                if (resp.optString("stop_reason") != "tool_use") {
-                    val sb = StringBuilder()
-                    for (i in 0 until content.length()) {
-                        val b = content.getJSONObject(i)
-                        if (b.optString("type") == "text") sb.append(b.optString("text"))
-                    }
-                    return@withContext sb.toString().trim().ifEmpty { "Done." }
-                }
-
-                // Claude asked to use tools: run them and send the results back.
-                msgs.put(JSONObject().put("role", "assistant").put("content", content))
-                val results = JSONArray()
-                for (i in 0 until content.length()) {
-                    val b = content.getJSONObject(i)
-                    if (b.optString("type") == "tool_use") {
-                        val out = tools.run(b.getString("name"), b.optJSONObject("input") ?: JSONObject())
-                        results.put(
-                            JSONObject()
-                                .put("type", "tool_result")
-                                .put("tool_use_id", b.getString("id"))
-                                .put("content", out)
-                        )
-                    }
-                }
-                msgs.put(JSONObject().put("role", "user").put("content", results))
-            }
-            "I got stuck in a loop. Please try again."
+            if (gemini) replyGemini(history) else replyClaude(history)
         } catch (e: Exception) {
             "I couldn't reach my brain (${e.javaClass.simpleName}). Check your internet connection."
         }
     }
 
-    private fun apiError(code: Int, body: String): String {
+    // ---------------- Google Gemini ----------------
+    private fun replyGemini(history: List<ChatMsg>): String {
+        val contents = JSONArray()
+        history.takeLast(20).dropWhile { it.role != "user" }.forEach {
+            contents.put(
+                JSONObject()
+                    .put("role", if (it.role == "user") "user" else "model")
+                    .put("parts", JSONArray().put(JSONObject().put("text", it.text)))
+            )
+        }
+        val url = "https://generativelanguage.googleapis.com/v1beta/models/${store.geminiModel}:generateContent"
+        val headers = mapOf("x-goog-api-key" to store.geminiKey)
+
+        var rounds = 0
+        while (rounds++ < 6) {
+            val body = JSONObject()
+                .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", systemPrompt()))))
+                .put("contents", contents)
+                .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", tools.geminiDeclarations())))
+                .put("generationConfig", JSONObject().put("maxOutputTokens", 2048))
+            val (code, text) = Http.postJson(url, headers, body.toString())
+            if (code !in 200..299) return apiError(code, text, "Gemini")
+
+            val resp = JSONObject(text)
+            val candidate = resp.optJSONArray("candidates")?.optJSONObject(0)
+                ?: return "Gemini didn't return an answer (it may have been blocked). Try rephrasing."
+            val content = candidate.optJSONObject("content")
+                ?: return "Gemini returned an empty answer. Try again."
+            val parts = content.optJSONArray("parts") ?: JSONArray()
+
+            val calls = ArrayList<JSONObject>()
+            val sb = StringBuilder()
+            for (i in 0 until parts.length()) {
+                val p = parts.getJSONObject(i)
+                val fc = p.optJSONObject("functionCall")
+                if (fc != null) calls.add(fc)
+                else if (!p.optBoolean("thought", false)) sb.append(p.optString("text"))
+            }
+            if (calls.isEmpty()) return sb.toString().trim().ifEmpty { "Done." }
+
+            // Replay the model turn exactly as received (keeps thought signatures intact).
+            contents.put(content)
+            val results = JSONArray()
+            for (fc in calls) {
+                val name = fc.getString("name")
+                val out = tools.run(name, fc.optJSONObject("args") ?: JSONObject())
+                val fr = JSONObject()
+                    .put("name", name)
+                    .put("response", JSONObject().put("result", out))
+                val id = fc.optString("id")
+                if (id.isNotEmpty()) fr.put("id", id)
+                results.put(JSONObject().put("functionResponse", fr))
+            }
+            contents.put(JSONObject().put("role", "user").put("parts", results))
+        }
+        return "I got stuck in a loop. Please try again."
+    }
+
+    // ---------------- Anthropic Claude ----------------
+    private fun replyClaude(history: List<ChatMsg>): String {
+        val msgs = JSONArray()
+        history.takeLast(20).dropWhile { it.role != "user" }.forEach {
+            msgs.put(JSONObject().put("role", it.role).put("content", it.text))
+        }
+        var rounds = 0
+        while (rounds++ < 6) {
+            val body = JSONObject()
+                .put("model", store.model)
+                .put("max_tokens", 700)
+                .put("system", systemPrompt())
+                .put("tools", tools.schema())
+                .put("messages", msgs)
+            val (code, text) = Http.postJson(
+                CLAUDE_URL,
+                mapOf("x-api-key" to store.apiKey, "anthropic-version" to "2023-06-01"),
+                body.toString()
+            )
+            if (code !in 200..299) return apiError(code, text, "Claude")
+
+            val resp = JSONObject(text)
+            val content = resp.getJSONArray("content")
+            if (resp.optString("stop_reason") != "tool_use") {
+                val sb = StringBuilder()
+                for (i in 0 until content.length()) {
+                    val b = content.getJSONObject(i)
+                    if (b.optString("type") == "text") sb.append(b.optString("text"))
+                }
+                return sb.toString().trim().ifEmpty { "Done." }
+            }
+            msgs.put(JSONObject().put("role", "assistant").put("content", content))
+            val results = JSONArray()
+            for (i in 0 until content.length()) {
+                val b = content.getJSONObject(i)
+                if (b.optString("type") == "tool_use") {
+                    val out = tools.run(b.getString("name"), b.optJSONObject("input") ?: JSONObject())
+                    results.put(
+                        JSONObject()
+                            .put("type", "tool_result")
+                            .put("tool_use_id", b.getString("id"))
+                            .put("content", out)
+                    )
+                }
+            }
+            msgs.put(JSONObject().put("role", "user").put("content", results))
+        }
+        return "I got stuck in a loop. Please try again."
+    }
+
+    private fun apiError(code: Int, body: String, who: String): String {
         val msg = try {
             JSONObject(body).getJSONObject("error").getString("message")
         } catch (e: Exception) {
             body.take(120)
         }
-        return when (code) {
-            401 -> "The API key was rejected. Please check it in settings."
-            else -> "The AI service returned error $code: $msg"
+        val keyProblem = code == 401 || code == 403 || msg.contains("API key not valid", true)
+        return when {
+            keyProblem -> "The $who API key was rejected. Please check it in settings."
+            code == 429 -> "$who says I'm asking too fast or the free quota is used up. Try again in a minute."
+            code == 404 -> "$who doesn't know that model name. Check the model in settings."
+            else -> "$who returned error $code: ${msg.take(160)}"
         }
     }
 
@@ -103,6 +170,6 @@ class Brain(private val store: Store, private val tools: Tools) {
     }
 
     companion object {
-        private const val API_URL = "https://api.anthropic.com/v1/messages"
+        private const val CLAUDE_URL = "https://api.anthropic.com/v1/messages"
     }
 }

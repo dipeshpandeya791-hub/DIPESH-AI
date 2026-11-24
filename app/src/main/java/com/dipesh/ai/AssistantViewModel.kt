@@ -74,7 +74,9 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         process(t)
     }
 
-    fun saveSettings(apiKey: String, city: String, language: String) {
+    fun saveSettings(provider: String, geminiKey: String, apiKey: String, city: String, language: String) {
+        store.provider = provider
+        store.geminiKey = geminiKey
         store.apiKey = apiKey
         store.city = city
         store.language = language

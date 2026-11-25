@@ -53,6 +53,14 @@ app/src/main/java/com/dipesh/ai/
 desktop/                 earlier Python desktop version
 ```
 
+## Camera, WhatsApp, files, search, routines
+- **Camera vision:** tap 📷 or say "what is this?", take a photo and the AI identifies it.
+- **WhatsApp:** "Message Sita on WhatsApp: I'll be late" opens the chat ready to send; add "and send it" (with screen control on) to press Send for you.
+- **Files:** find, open, move, create and delete files after you tap **Settings > Allow file access**. Deleting and moving always ask.
+- **Internet search:** real answers (Google-grounded with Gemini).
+- **Automation routines:** "Save a routine called good morning: tell me the weather; read the news; read my calendar", then say "run good morning".
+- **Wake words:** "Hey Dipesh" or "Hey Arena" (editable in Settings).
+
 ## Phone access
 In the app: **Settings > Grant phone permissions** (contacts, calls, SMS, calendar, location) and **Settings > Enable screen control** (turn on DIPESH AI under Accessibility). Every call, text and screen action shows an Allow / Deny prompt unless you switch that off in Settings.
 

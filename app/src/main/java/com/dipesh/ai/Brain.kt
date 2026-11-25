@@ -11,7 +11,7 @@ import java.util.Locale
 /** The AI brain. Supports Google Gemini (default) and Anthropic Claude, both with tool use. */
 class Brain(private val store: Store, private val tools: Tools) {
 
-    suspend fun reply(history: List<ChatMsg>): String = withContext(Dispatchers.IO) {
+    suspend fun reply(history: List<ChatMsg>, image: String? = null): String = withContext(Dispatchers.IO) {
         val gemini = store.provider == Store.GEMINI
         val key = if (gemini) store.geminiKey else store.apiKey
         if (key.isBlank()) {
@@ -20,20 +20,25 @@ class Brain(private val store: Store, private val tools: Tools) {
                 "Until then I can still tell the time, open apps, and control the flashlight."
         }
         try {
-            if (gemini) replyGemini(history) else replyClaude(history)
+            if (gemini) replyGemini(history, image) else replyClaude(history, image)
         } catch (e: Exception) {
             "I couldn't reach my brain (${e.javaClass.simpleName}). Check your internet connection."
         }
     }
 
     // ---------------- Google Gemini ----------------
-    private fun replyGemini(history: List<ChatMsg>): String {
+    private fun replyGemini(history: List<ChatMsg>, image: String?): String {
         val contents = JSONArray()
         history.takeLast(20).dropWhile { it.role != "user" }.forEach {
             contents.put(
                 JSONObject()
                     .put("role", if (it.role == "user") "user" else "model")
                     .put("parts", JSONArray().put(JSONObject().put("text", it.text)))
+            )
+        }
+        if (image != null && contents.length() > 0) {
+            contents.getJSONObject(contents.length() - 1).getJSONArray("parts").put(
+                JSONObject().put("inline_data", JSONObject().put("mime_type", "image/jpeg").put("data", image))
             )
         }
         val url = "https://generativelanguage.googleapis.com/v1beta/models/${store.geminiModel}:generateContent"
@@ -85,10 +90,23 @@ class Brain(private val store: Store, private val tools: Tools) {
     }
 
     // ---------------- Anthropic Claude ----------------
-    private fun replyClaude(history: List<ChatMsg>): String {
+    private fun replyClaude(history: List<ChatMsg>, image: String?): String {
         val msgs = JSONArray()
         history.takeLast(20).dropWhile { it.role != "user" }.forEach {
             msgs.put(JSONObject().put("role", it.role).put("content", it.text))
+        }
+        if (image != null && msgs.length() > 0) {
+            val last = msgs.getJSONObject(msgs.length() - 1)
+            val text = last.optString("content")
+            last.put(
+                "content", JSONArray()
+                    .put(
+                        JSONObject().put("type", "image").put(
+                            "source", JSONObject().put("type", "base64").put("media_type", "image/jpeg").put("data", image)
+                        )
+                    )
+                    .put(JSONObject().put("type", "text").put("text", text))
+            )
         }
         var rounds = 0
         while (rounds++ < 6) {
@@ -166,6 +184,7 @@ class Brain(private val store: Store, private val tools: Tools) {
                 append(". ")
             }
             append("To operate other apps, call read_screen to see what is displayed, then tap_text, type_text, scroll_screen or press_button, and check again with read_screen. ")
+            append("You can see photos the user takes with the camera. You can search the web with search_web, manage files, send WhatsApp messages, and run saved automation routines with run_routine. ")
             append("Calls and text messages need the user's approval, which the app asks for automatically. ")
             append("When the user tells you something worth remembering long-term, call remember_fact.")
         }

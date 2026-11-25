@@ -23,12 +23,14 @@ class Tools(context: Context, private val store: Store) {
     /** Set by the UI: shows an Allow/Deny prompt and returns the user's answer (blocking). */
     var confirm: (String) -> Boolean = { false }
     private val phone = PhoneTools(context, store) { confirm(it) }
+    private val files = FileTools(context) { confirm(it) }
 
     // ---------- Tool definitions sent to Claude ----------
     fun schema(): JSONArray {
         val all = baseSchema()
-        val extra = phone.schema()
-        for (i in 0 until extra.length()) all.put(extra.getJSONObject(i))
+        for (extra in listOf(phone.schema(), files.schema())) {
+            for (i in 0 until extra.length()) all.put(extra.getJSONObject(i))
+        }
         return all
     }
 
@@ -37,6 +39,18 @@ class Tools(context: Context, private val store: Store) {
             mapOf("city" to ("string" to "City name. Omit to use the user's saved city."))))
         put(def("get_news", "Latest news headlines, optionally about a topic.",
             mapOf("topic" to ("string" to "Topic to search for. Omit for top headlines."))))
+        put(def("search_web", "Search the internet for current information and get an answer.",
+            mapOf("query" to ("string" to "What to look up.")), listOf("query")))
+        put(def("save_routine", "Save an automation routine: a named list of steps to run later on request.",
+            mapOf(
+                "name" to ("string" to "Routine name, e.g. good morning."),
+                "steps" to ("string" to "The steps in plain language, separated by semicolons.")
+            ), listOf("name", "steps")))
+        put(def("run_routine", "Run a saved routine by name.",
+            mapOf("name" to ("string" to "Routine name.")), listOf("name")))
+        put(def("list_routines", "List saved routines."))
+        put(def("delete_routine", "Delete a saved routine.",
+            mapOf("name" to ("string" to "Routine name.")), listOf("name")))
         put(def("save_note", "Save a note for the user.",
             mapOf("text" to ("string" to "Note text.")), listOf("text")))
         put(def("list_notes", "Read back the user's saved notes."))
@@ -114,6 +128,17 @@ class Tools(context: Context, private val store: Store) {
                 val city = input.optString("city").ifBlank { store.city }
                 if (city.isBlank()) "No city given. Ask the user which city." else WeatherService.report(city)
             }
+            "search_web" -> SearchService.search(store, input.getString("query"))
+            "save_routine" -> { store.saveRoutine(input.getString("name"), input.getString("steps")); "Routine saved." }
+            "delete_routine" -> { store.deleteRoutine(input.getString("name")); "Routine deleted." }
+            "list_routines" -> store.routines().let { r ->
+                if (r.isEmpty()) "No routines saved yet." else r.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+            }
+            "run_routine" -> {
+                val steps = store.routines()[input.getString("name").trim().lowercase()]
+                if (steps == null) "There is no routine with that name."
+                else "Routine steps: $steps. Carry out each step now using your tools, then briefly summarize what you did."
+            }
             "get_news" -> NewsService.headlines(input.optString("topic"))
             "save_note" -> { store.addNote(input.getString("text")); "Note saved." }
             "list_notes" -> store.notes().let { n ->
@@ -137,7 +162,7 @@ class Tools(context: Context, private val store: Store) {
                 launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")))
                 "Opened the dialer with $num."
             }
-            else -> phone.run(name, input) ?: "Unknown tool: $name"
+            else -> phone.run(name, input) ?: files.run(name, input) ?: "Unknown tool: $name"
         }
     } catch (e: Exception) {
         "Tool error: ${e.message ?: e.javaClass.simpleName}"

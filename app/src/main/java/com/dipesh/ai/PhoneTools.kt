@@ -46,6 +46,12 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
                 "title" to ("string" to "Event title."),
                 "start" to ("string" to "Start time as yyyy-MM-dd HH:mm (24h, local time).")
             ), listOf("title", "start")))
+        put(d("whatsapp_message", "Open WhatsApp with a message to a contact ready to send. Set send=true to also press Send (needs screen control).",
+            mapOf(
+                "target" to ("string" to "Contact name or phone number with country code."),
+                "text" to ("string" to "Message text."),
+                "send" to ("boolean" to "true to press Send automatically; the user is asked to approve.")
+            ), listOf("target", "text")))
         put(d("get_location", "Get the phone's last known location and address.", emptyMap()))
         put(d("navigate", "Start map navigation or search to a place.",
             mapOf("destination" to ("string" to "Place or address.")), listOf("destination")))
@@ -92,6 +98,7 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
         "send_sms" -> sendSms(input.getString("target"), input.getString("text"))
         "read_calendar" -> readCalendar(input.optInt("days", 3).coerceIn(1, 30))
         "add_calendar_event" -> addEvent(input.getString("title"), input.getString("start"))
+        "whatsapp_message" -> whatsapp(input.getString("target"), input.getString("text"), input.optBoolean("send", false))
         "get_location" -> location()
         "navigate" -> navigate(input.getString("destination"))
         "open_camera" -> { start(Intent(MediaStore.ACTION_IMAGE_CAPTURE)); "Camera opened." }
@@ -175,6 +182,26 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
         val sms = if (Build.VERSION.SDK_INT >= 31) ctx.getSystemService(SmsManager::class.java) else SmsManager.getDefault()
         sms.sendMultipartTextMessage(number, null, sms.divideMessage(text), null, null)
         return "Message sent to $label."
+    }
+
+    private fun whatsapp(target: String, text: String, send: Boolean): String {
+        val (label, number) = resolve(target) ?: return "I couldn't find $target in your contacts."
+        val digits = number.filter { it.isDigit() }
+        if (digits.length < 8) return "That number looks too short for WhatsApp. I need it with the country code."
+        if (send && PhoneControlService.instance != null &&
+            !ask("Send this WhatsApp message to $label?\n\n\"$text\"")
+        ) return "The user declined."
+        val i = Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$digits?text=" + URLEncoder.encode(text, "UTF-8")))
+        if (ctx.packageManager.getLaunchIntentForPackage("com.whatsapp") != null) i.setPackage("com.whatsapp")
+        start(i)
+        if (!send) return "WhatsApp is open with your message to $label ready. Tap Send to send it."
+        val svc = PhoneControlService.instance
+            ?: return "WhatsApp is open with the message ready. Turn on screen control so I can press Send, or tap it yourself."
+        repeat(10) {
+            Thread.sleep(700)
+            if (svc.tapText("Send")) return "Message sent to $label."
+        }
+        return "I opened the chat but couldn't find the Send button. Please tap it."
     }
 
     private fun readCalendar(days: Int): String {

@@ -60,6 +60,8 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import java.io.File
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 private val Panel = Color(0xFF04262B)
@@ -97,6 +99,21 @@ fun App(vm: AssistantViewModel = viewModel()) {
         if (ok) pending?.invoke()
         pending = null
     }
+    var photoFile by remember { mutableStateOf<File?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val f = photoFile
+        if (ok && f != null) vm.lookAtPhoto(f, input.trim().ifEmpty { null }.also { input = "" })
+    }
+    fun launchCamera() {
+        val dir = File(ctx.cacheDir, "photos").apply { mkdirs() }
+        val f = File(dir, "look.jpg")
+        photoFile = f
+        cameraLauncher.launch(FileProvider.getUriForFile(ctx, ctx.packageName + ".files", f))
+    }
+    LaunchedEffect(vm.cameraRequest) {
+        if (vm.cameraRequest > 0) launchCamera()
+    }
+
     val permsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
@@ -180,6 +197,8 @@ fun App(vm: AssistantViewModel = viewModel()) {
                 })
             )
             Spacer(Modifier.width(8.dp))
+            OutlinedButton(onClick = { vm.requestCamera() }) { Text("📷") }
+            Spacer(Modifier.width(8.dp))
             Button(
                 onClick = { withMic { vm.onMicTap() } },
                 enabled = !vm.handsFree,
@@ -216,7 +235,9 @@ fun App(vm: AssistantViewModel = viewModel()) {
                     Manifest.permission.SEND_SMS,
                     Manifest.permission.READ_CALENDAR,
                     Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
                 )
             )
         }) { showSettings = false }
@@ -246,6 +267,7 @@ private val LANGUAGES = listOf("English" to "en-US", "नेपाली (Nepali
 private fun SettingsDialog(vm: AssistantViewModel, onGrant: () -> Unit, onClose: () -> Unit) {
     val ctx = LocalContext.current
     var autoApprove by remember { mutableStateOf(vm.store.autoApprove) }
+    var wake by remember { mutableStateOf(vm.store.wakeWords) }
     var provider by remember { mutableStateOf(vm.store.provider) }
     var geminiKey by remember { mutableStateOf(vm.store.geminiKey) }
     var key by remember { mutableStateOf(vm.store.apiKey) }
@@ -295,6 +317,11 @@ private fun SettingsDialog(vm: AssistantViewModel, onGrant: () -> Unit, onClose:
                         Text(label)
                     }
                 }
+                OutlinedTextField(
+                    value = wake, onValueChange = { wake = it },
+                    label = { Text("Wake words (comma separated)") },
+                    singleLine = true, modifier = Modifier.fillMaxWidth()
+                )
                 Text("Phone access", fontWeight = FontWeight.Bold)
                 OutlinedButton(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
                     Text("Grant phone permissions")
@@ -307,6 +334,15 @@ private fun SettingsDialog(vm: AssistantViewModel, onGrant: () -> Unit, onClose:
                 ) {
                     Text(if (PhoneControlService.instance != null) "Screen control: ON (tap to manage)" else "Enable screen control")
                 }
+                OutlinedButton(
+                    onClick = {
+                        val i = if (Build.VERSION.SDK_INT >= 30)
+                            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, android.net.Uri.parse("package:" + ctx.packageName))
+                        else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + ctx.packageName))
+                        ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Allow file access") }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Don't ask before screen actions (not recommended)", modifier = Modifier.weight(1f), fontSize = 13.sp)
                     Switch(checked = autoApprove, onCheckedChange = { autoApprove = it })
@@ -321,7 +357,7 @@ private fun SettingsDialog(vm: AssistantViewModel, onGrant: () -> Unit, onClose:
             }
         },
         confirmButton = {
-            TextButton(onClick = { vm.saveSettings(provider, geminiKey, key, city, lang, autoApprove); onClose() }) { Text("Save") }
+            TextButton(onClick = { vm.saveSettings(provider, geminiKey, key, city, lang, autoApprove, wake); onClose() }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } }
     )

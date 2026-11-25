@@ -35,6 +35,27 @@ class Store(context: Context) {
         get() = p.getBoolean("auto_approve", false)
         set(v) = p.edit().putBoolean("auto_approve", v).apply()
 
+    var wakeWords: String
+        get() = p.getString("wake_words", DEFAULT_WAKE) ?: DEFAULT_WAKE
+        set(v) = p.edit().putString("wake_words", v.ifBlank { DEFAULT_WAKE }).apply()
+
+    fun routines(): Map<String, String> {
+        val o = JSONObject(p.getString("routines", "{}") ?: "{}")
+        return o.keys().asSequence().associateWith { o.getString(it) }
+    }
+
+    fun saveRoutine(name: String, steps: String) {
+        val o = JSONObject(p.getString("routines", "{}") ?: "{}")
+        o.put(name.trim().lowercase(), steps)
+        p.edit().putString("routines", o.toString()).apply()
+    }
+
+    fun deleteRoutine(name: String) {
+        val o = JSONObject(p.getString("routines", "{}") ?: "{}")
+        o.remove(name.trim().lowercase())
+        p.edit().putString("routines", o.toString()).apply()
+    }
+
     var city: String
         get() = p.getString("city", "") ?: ""
         set(v) = p.edit().putString("city", v.trim()).apply()
@@ -91,6 +112,7 @@ class Store(context: Context) {
     companion object {
         const val DEFAULT_MODEL = "claude-sonnet-5-5"
         const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
+        const val DEFAULT_WAKE = "dipesh, arena, arina, deepesh, दिपेश, एरीना"
         const val GEMINI = "gemini"
         const val CLAUDE = "claude"
     }

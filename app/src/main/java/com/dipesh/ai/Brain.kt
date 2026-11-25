@@ -41,8 +41,7 @@ class Brain(private val store: Store, private val tools: Tools) {
                 JSONObject().put("inline_data", JSONObject().put("mime_type", "image/jpeg").put("data", image))
             )
         }
-        val url = "https://generativelanguage.googleapis.com/v1beta/models/${store.geminiModel}:generateContent"
-        val headers = mapOf("x-goog-api-key" to store.geminiKey)
+        var model = store.geminiModel
 
         var rounds = 0
         while (rounds++ < 6) {
@@ -51,8 +50,9 @@ class Brain(private val store: Store, private val tools: Tools) {
                 .put("contents", contents)
                 .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", tools.geminiDeclarations())))
                 .put("generationConfig", JSONObject().put("maxOutputTokens", 2048))
-            val (code, text) = Http.postJson(url, headers, body.toString())
+            val (code, text, used) = geminiPost(body.toString(), model)
             if (code !in 200..299) return apiError(code, text, "Gemini")
+            model = used
 
             val resp = JSONObject(text)
             val candidate = resp.optJSONArray("candidates")?.optJSONObject(0)
@@ -87,6 +87,32 @@ class Brain(private val store: Store, private val tools: Tools) {
             contents.put(JSONObject().put("role", "user").put("parts", results))
         }
         return "I got stuck in a loop. Please try again."
+    }
+
+    /**
+     * Calls Gemini, retrying when the service is overloaded (503/429/5xx) and falling back to
+     * other Gemini models if the preferred one stays busy. Returns (status, body, modelUsed).
+     */
+    private fun geminiPost(body: String, preferred: String): Triple<Int, String, String> {
+        val models = listOf(preferred, "gemini-3.6-flash", "gemini-2.5-flash").distinct()
+        val headers = mapOf("x-goog-api-key" to store.geminiKey)
+        var lastCode = 0
+        var lastText = ""
+        for (m in models) {
+            val url = "https://generativelanguage.googleapis.com/v1beta/models/$m:generateContent"
+            for (attempt in 0 until 3) {
+                val (code, text) = Http.postJson(url, headers, body)
+                if (code in 200..299) return Triple(code, text, m)
+                lastCode = code
+                lastText = text
+                val busy = code == 429 || code == 500 || code == 502 || code == 503 || code == 504
+                if (!busy) break
+                Thread.sleep(1500L * (attempt + 1))
+            }
+            // A bad key or malformed request will fail on every model, so stop early.
+            if (lastCode == 400 || lastCode == 401 || lastCode == 403) break
+        }
+        return Triple(lastCode, lastText, preferred)
     }
 
     // ---------------- Anthropic Claude ----------------
@@ -162,6 +188,7 @@ class Brain(private val store: Store, private val tools: Tools) {
         return when {
             keyProblem -> "The $who API key was rejected. Please check it in settings."
             code == 429 -> "$who says I'm asking too fast or the free quota is used up. Try again in a minute."
+            code == 503 -> "$who is very busy right now. I tried other models too. Please try again in a moment."
             code == 404 -> "$who doesn't know that model name. Check the model in settings."
             else -> "$who returned error $code: ${msg.take(160)}"
         }

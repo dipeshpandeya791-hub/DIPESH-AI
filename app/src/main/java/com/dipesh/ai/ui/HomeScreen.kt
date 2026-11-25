@@ -76,7 +76,9 @@ fun HomeScreen(
     val haptic = LocalHapticFeedback.current
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val wide = maxWidth >= 720.dp
+        val maxW = maxWidth
+        val maxH = maxHeight
+        val wide = maxW >= 720.dp
         if (wide) {
             Row(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                 Column(
@@ -84,7 +86,7 @@ fun HomeScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Header(settings.userName, settings.language, vm.status, online)
-                    OrbPanel(vm, minOf(maxHeight * 0.55f, 380.dp), requestMic, haptic)
+                    OrbPanel(vm, minOf(maxH * 0.55f, 380.dp), requestMic, haptic)
                 }
                 Column(Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
                     ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands)
@@ -97,7 +99,7 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Header(settings.userName, settings.language, vm.status, online)
-                OrbPanel(vm, minOf(maxWidth * 0.72f, 300.dp), requestMic, haptic)
+                OrbPanel(vm, minOf(maxW * 0.72f, 300.dp), requestMic, haptic)
                 Column(Modifier.fillMaxWidth()) { ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands) }
                 Spacer(Modifier.height(24.dp))
             }

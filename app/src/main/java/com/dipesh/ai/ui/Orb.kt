@@ -46,7 +46,7 @@ import kotlin.math.sin
 
 /** Seconds since the composable entered the screen, updated every frame (60 FPS where the device allows). */
 @Composable
-fun rememberTime(): State<Float> {
+fun rememberTime(): androidx.compose.runtime.FloatState {
     val time = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) {
         var start = 0L

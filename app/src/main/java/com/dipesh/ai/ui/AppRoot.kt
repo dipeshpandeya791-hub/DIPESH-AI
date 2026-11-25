@@ -145,17 +145,7 @@ private fun RootContent(vm: AssistantViewModel) {
                     if (vm.banner == banner) vm.banner = null
                 }
             }
-            AnimatedVisibility(
-                visible = banner != null, modifier = Modifier.align(Alignment.TopCenter),
-                enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it }
-            ) {
-                GlassCard(
-                    Modifier.statusBarsPadding().padding(horizontal = 24.dp, vertical = 8.dp).fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp), onClick = { vm.banner = null }
-                ) {
-                    Text(banner.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = c.text)
-                }
-            }
+            Banner(banner, Modifier.align(Alignment.TopCenter)) { vm.banner = null }
         }
 
         AnimatedVisibility(visible = !imeVisible && route in tabs.map { it.route }) {
@@ -198,5 +188,22 @@ private fun RootContent(vm: AssistantViewModel) {
             confirmButton = { TextButton({ vm.answerConfirm(true) }) { Text("Allow") } },
             dismissButton = { TextButton({ vm.answerConfirm(false) }) { Text("Deny") } }
         )
+    }
+}
+
+
+@Composable
+private fun Banner(message: String?, modifier: Modifier, onDismiss: () -> Unit) {
+    val c = LocalDipeshColors.current
+    AnimatedVisibility(
+        visible = message != null, modifier = modifier,
+        enter = fadeIn() + slideInVertically { -it }, exit = fadeOut() + slideOutVertically { -it }
+    ) {
+        GlassCard(
+            Modifier.statusBarsPadding().padding(horizontal = 24.dp, vertical = 8.dp).fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp), onClick = onDismiss
+        ) {
+            Text(message.orEmpty(), style = MaterialTheme.typography.bodyMedium, color = c.text)
+        }
     }
 }

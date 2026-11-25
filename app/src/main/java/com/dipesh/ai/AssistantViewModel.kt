@@ -116,6 +116,8 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                 voice.rate = s.speechRate
                 voice.pitch = s.pitch
                 voice.voiceName = s.voiceName
+                voice.situationVoices = s.situationVoices
+                voice.cycleVoices = s.cycleVoices
             }
         }
         tools.confirm = { text ->
@@ -218,6 +220,9 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             status = Status.SPEAKING
             hint = "Speaking…"
             voice.speak(spokenForm(result.text)) { onSpeechDone() }
+        } else if (result.isError && store.settings.value.speakReplies && result.text.length < 160) {
+            status = Status.SPEAKING
+            voice.speak(result.text, "error") { onSpeechDone() }
         } else {
             onSpeechDone()
         }
@@ -275,6 +280,13 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     fun previewVoice() = speak("Hello, I'm DIPESH AI. This is how I sound.")
 
     fun voiceOptions(): List<String> = voice.voiceOptions()
+
+    fun availableLanguages(): List<Pair<String, String>> = voice.availableLanguages()
+
+    fun previewSituation(situation: String) = voice.run {
+        stopSpeaking()
+        speak(when (situation) { "error" -> "Sorry, something went wrong."; "ack" -> "Yes?"; "briefing" -> "Here is your briefing."; else -> "Hello, I'm DIPESH AI." }, situation) {}
+    }
 
     // ---------- listening ----------
     fun onMicTap() {
@@ -341,7 +353,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             if (rest.isEmpty()) {
                 awaitingCommand = true
                 status = Status.SPEAKING
-                voice.speak("Yes?") { listenOnce() }
+                voice.speak("Yes?", "ack") { listenOnce() }
             } else {
                 send(rest)
             }

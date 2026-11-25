@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -132,6 +133,27 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
             ChipRow {
                 GlassChip("Google Gemini", s.provider == "gemini", { vm.update { it.copy(provider = "gemini") } })
                 GlassChip("Anthropic Claude", s.provider == "claude", { vm.update { it.copy(provider = "claude") } })
+                GlassChip("Free / local server", s.provider == "openai", { vm.update { it.copy(provider = "openai") } })
+            }
+            if (s.provider == "openai") {
+                Spacer(Modifier.height(10.dp))
+                Text("Any OpenAI-compatible server: Groq and OpenRouter have free tiers; Ollama is free on your own PC or in Termux.",
+                    style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+                Spacer(Modifier.height(6.dp))
+                var oUrl by remember(s.openaiUrl) { mutableStateOf(s.openaiUrl) }
+                var oKey by remember { mutableStateOf(s.openaiKey) }
+                var oModel by remember(s.openaiModel) { mutableStateOf(s.openaiModel) }
+                ChipRow {
+                    GlassChip("Groq (free)", false, { vm.update { it.copy(openaiUrl = "https://api.groq.com/openai/v1", openaiModel = "llama-3.3-70b-versatile") } })
+                    GlassChip("OpenRouter (free)", false, { vm.update { it.copy(openaiUrl = "https://openrouter.ai/api/v1", openaiModel = "meta-llama/llama-3.3-70b-instruct:free") } })
+                    GlassChip("Ollama (local)", false, { vm.update { it.copy(openaiUrl = "http://localhost:11434/v1", openaiModel = "llama3.2") } })
+                }
+                Spacer(Modifier.height(8.dp))
+                GlassTextField(oUrl, { oUrl = it; vm.update { st -> st.copy(openaiUrl = it.trim()) } }, "Server address (ends with /v1)")
+                Spacer(Modifier.height(8.dp))
+                GlassTextField(oKey, { oKey = it; vm.update { st -> st.copy(openaiKey = it.trim()) } }, "API key (not needed for Ollama)", password = true)
+                Spacer(Modifier.height(8.dp))
+                GlassTextField(oModel, { oModel = it; vm.update { st -> st.copy(openaiModel = it.trim()) } }, "Model name")
             }
             Spacer(Modifier.height(12.dp))
             var gKey by remember { mutableStateOf(s.geminiKey) }
@@ -177,6 +199,31 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
 
         // ---------------- Voice ----------------
         SectionTitle("Voice")
+        var showLangs by remember { mutableStateOf(false) }
+        if (showLangs) {
+            val all = remember { vm.availableLanguages() }
+            var filter by remember { mutableStateOf("") }
+            AlertDialog(
+                onDismissRequest = { showLangs = false },
+                title = { Text("Choose a language") },
+                text = {
+                    Column {
+                        GlassTextField(filter, { filter = it }, "Search")
+                        Spacer(Modifier.height(8.dp))
+                        if (all.isEmpty()) Text("No speech engine languages found. Install Google Speech Services or another free TTS engine, then retry.",
+                            style = MaterialTheme.typography.bodySmall)
+                        androidx.compose.foundation.lazy.LazyColumn(Modifier.height(320.dp)) {
+                            items(all.filter { filter.isBlank() || it.second.contains(filter, true) || it.first.contains(filter, true) }) { (tag, name) ->
+                                Text("$name  ($tag)", Modifier.fillMaxWidth().clickable {
+                                    vm.update { it.copy(language = tag, voiceName = "") }; showLangs = false
+                                }.padding(vertical = 10.dp))
+                            }
+                        }
+                    }
+                },
+                confirmButton = { TextButton({ showLangs = false }) { Text("Close") } }
+            )
+        }
         GlassCard(Modifier.fillMaxWidth()) {
             Text("Language", style = MaterialTheme.typography.labelLarge, color = c.textMuted)
             Spacer(Modifier.height(6.dp))
@@ -184,6 +231,8 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
                 listOf("en-US" to "English", "ne-NP" to "नेपाली", "hi-IN" to "हिन्दी").forEach { (v, l) ->
                     GlassChip(l, s.language == v, { vm.update { it.copy(language = v, voiceName = "") } })
                 }
+                if (s.language !in listOf("en-US", "ne-NP", "hi-IN")) GlassChip(s.language, true, {})
+                GlassChip("More languages…", false, { showLangs = true })
             }
             Spacer(Modifier.height(12.dp))
             Text("Speed ${"%.1f".format(s.speechRate)}×", style = MaterialTheme.typography.labelLarge, color = c.textMuted)
@@ -207,6 +256,25 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
             GlassTextField(wake, { wake = it; vm.update { st -> st.copy(wakeWords = it) } }, "Wake words (comma separated)")
             Spacer(Modifier.height(10.dp))
             OutlineButton("Preview voice", { vm.previewVoice() })
+            Spacer(Modifier.height(12.dp))
+            SettingRow("Voice profiles per situation", "Different voice and tone for normal replies, long briefings, wake acknowledgements and errors. Auto picks from your installed free voices.") {
+                GlassSwitch(s.cycleVoices) { v -> vm.update { it.copy(cycleVoices = v) } }
+            }
+            listOf("reply" to "Replies", "briefing" to "Long briefings", "ack" to "Wake 'Yes?'", "error" to "Errors").forEach { (sit, label) ->
+                val current = s.situationVoices.lineSequence().map { it.split('=', limit = 2) }
+                    .firstOrNull { it.size == 2 && it[0] == sit }?.get(1).orEmpty()
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = c.text)
+                    GlassChip(current.ifBlank { "Auto" }.takeLast(22), current.isNotBlank(), {
+                        val opts = listOf("") + voices
+                        val next = opts[(opts.indexOf(current) + 1).mod(opts.size)]
+                        val kept = s.situationVoices.lineSequence().filter { it.isNotBlank() && !it.startsWith("$sit=") }.toList()
+                        vm.update { it.copy(situationVoices = (kept + if (next.isNotBlank()) listOf("$sit=$next") else emptyList()).joinToString("\n")) }
+                    })
+                    Text("▶", Modifier.clickable { vm.previewSituation(sit) }.padding(10.dp), color = c.text)
+                }
+            }
+            Text("Tap a voice name to cycle through installed voices; ▶ previews it.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
         }
 
         // ---------------- Memory ----------------

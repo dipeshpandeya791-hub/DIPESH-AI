@@ -28,7 +28,8 @@ data class Settings(
     val situationVoices: String = "", // situation=voiceName per line
     val openaiUrl: String = "http://localhost:11434/v1", // free OpenAI-compatible endpoint (Ollama, Groq, OpenRouter...)
     val openaiKey: String = "",
-    val openaiModel: String = "llama3.2"
+    val openaiModel: String = "llama3.2",
+    val cycleVoices: Boolean = false
 ) {
     companion object {
         const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"

@@ -26,9 +26,10 @@ class Brain(private val store: Store, private val tools: Tools) {
 
     suspend fun reply(history: List<ChatMsg>, image: String?, onText: (String) -> Unit): Result =
         withContext(Dispatchers.IO) {
+            val openai = store.provider == "openai"
             val gemini = store.provider == Store.GEMINI
             val key = if (gemini) store.geminiKey else store.apiKey
-            if (key.isBlank()) {
+            if (!openai && key.isBlank()) {
                 val which = if (gemini) "Gemini" else "Anthropic"
                 return@withContext Result(
                     "My AI brain is offline. Open Settings, then AI & API, and paste your $which API key. " +
@@ -37,11 +38,12 @@ class Brain(private val store: Store, private val tools: Tools) {
                 )
             }
             try {
-                if (gemini) replyGemini(history, image, onText) else replyClaude(history, image, onText)
+                if (openai) replyOpenAi(history, image, onText)
+                else if (gemini) replyGemini(history, image, onText) else replyClaude(history, image, onText)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ApiError) {
-                Result(apiError(e.code, e.body, if (gemini) "Gemini" else "Claude"), true)
+                Result(apiError(e.code, e.body, if (openai) "The AI server" else if (gemini) "Gemini" else "Claude"), true)
             } catch (e: IOException) {
                 Result("I couldn't reach my brain. Check your internet connection and try again.", true)
             } catch (e: Exception) {
@@ -211,6 +213,76 @@ class Brain(private val store: Store, private val tools: Tools) {
         return Result("I got stuck in a loop. Please try again.", true)
     }
 
+    // ---------------- Free OpenAI-compatible servers: Ollama, Groq, OpenRouter, LM Studio... ----------------
+    private fun openAiTools(): JSONArray {
+        val src = tools.schema(); val out = JSONArray()
+        for (i in 0 until src.length()) {
+            val t = src.getJSONObject(i); val sch = t.getJSONObject("input_schema")
+            val params = JSONObject().put("type", "object").put("properties", sch.getJSONObject("properties"))
+            if (sch.getJSONArray("required").length() > 0) params.put("required", sch.getJSONArray("required"))
+            out.put(JSONObject().put("type", "function").put("function",
+                JSONObject().put("name", t.getString("name")).put("description", t.getString("description")).put("parameters", params)))
+        }
+        return out
+    }
+
+    /** POSTs JSON to {base}/chat/completions over https (internet) or raw sockets (local/LAN server such as Ollama). */
+    private fun openAiPost(body: String): Pair<Int, String> {
+        val st = store.settings.value
+        val base = st.openaiUrl.trim().trimEnd('/')
+        val url = "$base/chat/completions"
+        val headers = if (st.openaiKey.isNotBlank()) mapOf("Authorization" to "Bearer ${st.openaiKey.trim()}") else emptyMap()
+        if (url.startsWith("https://")) return Http.postJson(url, headers, body)
+        val u = android.net.Uri.parse(url)
+        val r = LanHttp.request("POST", u.host ?: throw IOException("Bad server address"), if (u.port > 0) u.port else 80,
+            u.encodedPath ?: "/", headers, body, 120_000)
+        return r.code to r.text
+    }
+
+    private fun replyOpenAi(history: List<ChatMsg>, image: String?, onText: (String) -> Unit): Result {
+        val st = store.settings.value
+        if (st.openaiUrl.isBlank()) return Result("Set the server address in Settings > AI & API > Free / local server.", true)
+        val msgs = JSONArray().put(JSONObject().put("role", "system").put("content", systemPrompt()))
+        history.takeLast(20).dropWhile { it.role != "user" }.forEach {
+            msgs.put(JSONObject().put("role", if (it.role == "user") "user" else "assistant").put("content", it.text))
+        }
+        if (image != null && msgs.length() > 1) {
+            val last = msgs.getJSONObject(msgs.length() - 1)
+            last.put("content", JSONArray()
+                .put(JSONObject().put("type", "text").put("text", last.getString("content")))
+                .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$image"))))
+        }
+        val toolList = openAiTools()
+        var useTools = true
+        repeat(12) {
+            val req = JSONObject().put("model", st.openaiModel.ifBlank { "llama3.2" }).put("messages", msgs).put("stream", false)
+            if (useTools) req.put("tools", toolList)
+            val (code, text) = try { openAiPost(req.toString()) } catch (e: java.net.ConnectException) {
+                return Result("I couldn't connect to the AI server at ${st.openaiUrl}. Start it (for Ollama: run 'ollama serve' in Termux or on your PC) and check the address.", true)
+            }
+            if (code == 400 && useTools && (text.contains("tool", true) || text.contains("function", true))) {
+                useTools = false // this model can't use tools: continue as a plain chat instead of failing
+                return@repeat
+            }
+            if (code !in 200..299) throw ApiError(code, text)
+            val message = JSONObject(text).getJSONArray("choices").getJSONObject(0).getJSONObject("message")
+            val calls = message.optJSONArray("tool_calls")
+            if (calls == null || calls.length() == 0) {
+                val answer = message.optString("content", "").trim()
+                onText(answer)
+                return if (answer.isEmpty()) Result("The AI server returned an empty answer. Try rephrasing.", true) else Result(answer)
+            }
+            msgs.put(message)
+            for (i in 0 until calls.length()) {
+                val c = calls.getJSONObject(i); val f = c.getJSONObject("function")
+                val args = try { JSONObject(f.optString("arguments").ifBlank { "{}" }) } catch (_: Exception) { JSONObject() }
+                val out = tools.run(f.getString("name"), args)
+                msgs.put(JSONObject().put("role", "tool").put("tool_call_id", c.optString("id")).put("content", out))
+            }
+        }
+        return Result("I got stuck in a loop. Please try again.", true)
+    }
+
     private fun apiError(code: Int, body: String, who: String): String {
         val msg = try {
             JSONObject(body).getJSONObject("error").getString("message")
@@ -244,7 +316,7 @@ class Brain(private val store: Store, private val tools: Tools) {
             if (s.userName.isNotBlank()) append("The user's name is ${s.userName}. ")
             append("Replies are often spoken aloud, so prefer 1-4 short sentences; use markdown lists or code blocks only when they really help. ")
             append("Use your tools to act on the phone and fetch live information instead of guessing. ")
-            append("Reply in the language the user speaks (English, Nepali or Hindi). Preferred language: ${s.language}. ")
+            append("Reply in the language the user speaks, whichever it is (you know every major language). Preferred language: ${Locale.forLanguageTag(s.language).getDisplayName(Locale.ENGLISH)} (${s.language}). ")
             append("Current date and time: $now. ")
             if (s.city.isNotBlank()) append("The user's city: ${s.city}. ")
             if (facts.isNotEmpty()) append("Things you remember about the user: ").append(facts.joinToString("; ")).append(". ")

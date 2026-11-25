@@ -70,6 +70,7 @@ class SettingsRepository(private val context: Context, private val scope: Corout
         val OPENAI_URL = stringPreferencesKey("openai_url")
         val OPENAI_KEY = stringPreferencesKey("openai_key_enc")
         val OPENAI_MODEL = stringPreferencesKey("openai_model")
+        val CYCLE = booleanPreferencesKey("cycle_voices")
 
         fun Preferences.toSettings(): Settings {
             val d = Settings()
@@ -100,7 +101,8 @@ class SettingsRepository(private val context: Context, private val scope: Corout
                 situationVoices = this[SIT_VOICES] ?: d.situationVoices,
                 openaiUrl = this[OPENAI_URL] ?: d.openaiUrl,
                 openaiKey = SecretBox.decrypt(this[OPENAI_KEY] ?: ""),
-                openaiModel = this[OPENAI_MODEL] ?: d.openaiModel
+                openaiModel = this[OPENAI_MODEL] ?: d.openaiModel,
+                cycleVoices = this[CYCLE] ?: d.cycleVoices
             )
         }
 
@@ -132,6 +134,7 @@ class SettingsRepository(private val context: Context, private val scope: Corout
             this[OPENAI_URL] = s.openaiUrl
             this[OPENAI_KEY] = SecretBox.encrypt(s.openaiKey)
             this[OPENAI_MODEL] = s.openaiModel
+            this[CYCLE] = s.cycleVoices
         }
     }
 }

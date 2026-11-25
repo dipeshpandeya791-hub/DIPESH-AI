@@ -41,6 +41,11 @@ class Voice(private val context: Context) {
             applyTts()
         }
 
+    /** "situation=voice name" per line; situations: reply, briefing, ack, error. */
+    var situationVoices: String = ""
+    /** When on, situations without a chosen voice cycle through the other installed voices and nudge pitch/speed. */
+    var cycleVoices: Boolean = false
+
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -48,19 +53,44 @@ class Voice(private val context: Context) {
         }
     }
 
-    private fun applyTts() {
+    private val situations = listOf("reply", "briefing", "ack", "error")
+
+    private fun voiceFor(situation: String): String {
+        situationVoices.lineSequence().map { it.split('=', limit = 2) }
+            .firstOrNull { it.size == 2 && it[0].trim() == situation && it[1].isNotBlank() }?.let { return it[1].trim() }
+        if (cycleVoices && situation != "reply") {
+            val opts = voiceOptions()
+            if (opts.isNotEmpty()) return opts[(situations.indexOf(situation) + opts.indexOf(voiceName).coerceAtLeast(0)) % opts.size]
+        }
+        return voiceName
+    }
+
+    private fun applyTts(situation: String = "reply") {
         val engine = tts ?: return
         if (!ttsReady) return
         engine.setLanguage(Locale.forLanguageTag(language))
-        engine.setSpeechRate(rate)
-        engine.setPitch(pitch)
-        if (voiceName.isNotEmpty()) {
+        val (rm, pm) = if (!cycleVoices) 1f to 1f else when (situation) {
+            "error" -> 0.92f to 0.9f
+            "ack" -> 1.1f to 1.05f
+            "briefing" -> 0.97f to 1f
+            else -> 1f to 1f
+        }
+        engine.setSpeechRate((rate * rm).coerceIn(0.3f, 2f))
+        engine.setPitch((pitch * pm).coerceIn(0.3f, 2f))
+        val name = voiceFor(situation)
+        if (name.isNotEmpty()) {
             try {
-                engine.voices?.firstOrNull { it.name == voiceName }?.let { engine.voice = it }
+                engine.voices?.firstOrNull { it.name == name }?.let { engine.voice = it }
             } catch (_: Exception) {
             }
         }
     }
+
+    /** Every language the installed (free, on-device) speech engine can speak: tag to display name. */
+    fun availableLanguages(): List<Pair<String, String>> = try {
+        (tts?.availableLanguages ?: emptySet()).map { it.toLanguageTag() to it.getDisplayName(Locale.ENGLISH) }
+            .filter { it.first.isNotBlank() && it.first != "und" }.distinctBy { it.first }.sortedBy { it.second }
+    } catch (e: Exception) { emptyList() }
 
     /** Names of installed voices for the current language. */
     fun voiceOptions(): List<String> = try {
@@ -137,12 +167,13 @@ class Voice(private val context: Context) {
         recognizer = null
     }
 
-    fun speak(text: String, finished: () -> Unit) {
+    fun speak(text: String, situation: String = "reply", finished: () -> Unit) {
         val engine = tts
         if (!ttsReady || engine == null || text.isBlank()) {
             finished()
             return
         }
+        applyTts(if (situation == "reply" && text.length > 350) "briefing" else situation)
         val id = UUID.randomUUID().toString()
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}

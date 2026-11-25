@@ -38,6 +38,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.font.FontWeight
+import com.dipesh.ai.Skills
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -252,6 +254,55 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
                 q, { q = it; vm.update { st -> st.copy(quickCommands = it) } },
                 "e.g. Morning|Tell me the weather, news and my calendar", singleLine = false, minLines = 3
             )
+        }
+
+        // ---------------- Developer agent ----------------
+        SectionTitle("Developer agent (free)")
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text(
+                "Lets DIPESH AI write and run code, work with your GitHub repos and run Linux commands in Termux. Everything here is free.",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted
+            )
+            Spacer(Modifier.height(8.dp))
+            var gh by remember { mutableStateOf(s.githubToken) }
+            GlassTextField(gh, { gh = it; vm.update { st -> st.copy(githubToken = it.trim()) } }, "GitHub token (free, github.com/settings/tokens)", password = true)
+            Spacer(Modifier.height(8.dp))
+            var sec by remember { mutableStateOf(s.secrets) }
+            GlassTextField(
+                sec, { sec = it; vm.update { st -> st.copy(secrets = it) } },
+                "Secrets vault: NAME=value per line (use as {{secret:NAME}})", singleLine = false, minLines = 2, password = true
+            )
+            Spacer(Modifier.height(4.dp))
+            Text("Tokens and secrets are encrypted on this phone with the Android Keystore and are never shown to the AI.",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+            Spacer(Modifier.height(12.dp))
+            Text("Skills", color = c.text, fontWeight = FontWeight.SemiBold)
+            Text("Load new abilities from any GitHub repo (owner/repo or owner/repo/path/SKILL.md).",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+            Spacer(Modifier.height(6.dp))
+            var src by remember { mutableStateOf("") }
+            GlassTextField(src, { src = it }, "owner/repo or https link")
+            Spacer(Modifier.height(6.dp))
+            ChipRow {
+                GradientButton("Install skill", { vm.installSkill(src.trim()); src = "" })
+                OutlineButton("Update all", { vm.updateSkills() })
+            }
+            val skillList = remember(s.skills) { Skills.load(vm.store) }
+            skillList.forEach { sk ->
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(sk.name, color = c.text)
+                        Text(sk.source, style = MaterialTheme.typography.bodySmall, color = c.textMuted, maxLines = 1)
+                    }
+                    GlassSwitch(sk.enabled) { v -> vm.setSkillEnabled(sk.name, v) }
+                    Text("✕", Modifier.clickable { vm.removeSkill(sk.name) }.padding(8.dp), color = c.danger)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Text("Termux (Linux shell)", color = c.text, fontWeight = FontWeight.SemiBold)
+            Text("Install Termux free from F-Droid, then ask DIPESH: \"help me set up Termux\".",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted)
         }
 
         // ---------------- Safety ----------------

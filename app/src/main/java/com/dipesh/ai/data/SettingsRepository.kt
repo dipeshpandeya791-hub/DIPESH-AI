@@ -62,6 +62,14 @@ class SettingsRepository(private val context: Context, private val scope: Corout
         val SPEAK = booleanPreferencesKey("speak_replies")
         val MEMORY = booleanPreferencesKey("memory_enabled")
         val QUICK = stringPreferencesKey("quick_commands")
+        val GITHUB = stringPreferencesKey("github_token_enc")
+        val SECRETS = stringPreferencesKey("secrets_enc")
+        val SKILLS = stringPreferencesKey("skills_json")
+        val DEVICES = stringPreferencesKey("devices_json")
+        val SIT_VOICES = stringPreferencesKey("situation_voices")
+        val OPENAI_URL = stringPreferencesKey("openai_url")
+        val OPENAI_KEY = stringPreferencesKey("openai_key_enc")
+        val OPENAI_MODEL = stringPreferencesKey("openai_model")
 
         fun Preferences.toSettings(): Settings {
             val d = Settings()
@@ -84,7 +92,15 @@ class SettingsRepository(private val context: Context, private val scope: Corout
                 voiceName = this[VOICE] ?: d.voiceName,
                 speakReplies = this[SPEAK] ?: d.speakReplies,
                 memoryEnabled = this[MEMORY] ?: d.memoryEnabled,
-                quickCommands = this[QUICK] ?: d.quickCommands
+                quickCommands = this[QUICK] ?: d.quickCommands,
+                githubToken = SecretBox.decrypt(this[GITHUB] ?: ""),
+                secrets = SecretBox.decrypt(this[SECRETS] ?: ""),
+                skills = this[SKILLS] ?: d.skills,
+                devices = this[DEVICES] ?: d.devices,
+                situationVoices = this[SIT_VOICES] ?: d.situationVoices,
+                openaiUrl = this[OPENAI_URL] ?: d.openaiUrl,
+                openaiKey = SecretBox.decrypt(this[OPENAI_KEY] ?: ""),
+                openaiModel = this[OPENAI_MODEL] ?: d.openaiModel
             )
         }
 
@@ -108,6 +124,14 @@ class SettingsRepository(private val context: Context, private val scope: Corout
             this[SPEAK] = s.speakReplies
             this[MEMORY] = s.memoryEnabled
             this[QUICK] = s.quickCommands
+            this[GITHUB] = SecretBox.encrypt(s.githubToken)
+            this[SECRETS] = SecretBox.encrypt(s.secrets)
+            this[SKILLS] = s.skills
+            this[DEVICES] = s.devices
+            this[SIT_VOICES] = s.situationVoices
+            this[OPENAI_URL] = s.openaiUrl
+            this[OPENAI_KEY] = SecretBox.encrypt(s.openaiKey)
+            this[OPENAI_MODEL] = s.openaiModel
         }
     }
 }

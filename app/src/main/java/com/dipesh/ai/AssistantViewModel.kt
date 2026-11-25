@@ -400,6 +400,23 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---------- developer agent ----------
+    fun installSkill(source: String) {
+        if (source.isBlank()) return
+        banner = "Installing skill…"
+        viewModelScope.launch(Dispatchers.IO) { banner = Skills.install(store, GitHubClient(store), source) }
+    }
+
+    fun updateSkills() {
+        banner = "Updating skills…"
+        viewModelScope.launch(Dispatchers.IO) { banner = Skills.update(store, GitHubClient(store)).take(200) }
+    }
+
+    fun setSkillEnabled(name: String, on: Boolean) =
+        Skills.save(store, Skills.load(store).map { if (it.name == name) it.copy(enabled = on) else it })
+
+    fun removeSkill(name: String) = Skills.save(store, Skills.load(store).filterNot { it.name == name })
+
     // ---------- memory ----------
     fun addFact(text: String) {
         val t = text.trim()

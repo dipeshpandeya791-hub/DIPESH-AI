@@ -67,7 +67,7 @@ class Brain(private val store: Store, private val tools: Tools) {
         var model = store.geminiModel
         val system = systemPrompt()
 
-        repeat(6) {
+        repeat(12) {
             val body = JSONObject()
                 .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
                 .put("contents", contents)
@@ -173,7 +173,7 @@ class Brain(private val store: Store, private val tools: Tools) {
             )
         }
         val system = systemPrompt()
-        repeat(6) {
+        repeat(12) {
             val body = JSONObject()
                 .put("model", store.model)
                 .put("max_tokens", 900)
@@ -252,7 +252,11 @@ class Brain(private val store: Store, private val tools: Tools) {
             append("You can see photos the user takes with the camera and screenshots they share. You can search the web with search_web, manage files, send WhatsApp messages and run saved automation routines with run_routine. ")
             append("To operate other apps, call read_screen to see what is displayed, then tap_text, type_text, scroll_screen or press_button, and check again with read_screen. ")
             append("Calls and text messages need the user's approval, which the app asks for automatically. ")
-            append("When the user tells you something worth remembering long-term, call remember_fact.")
+            append("When the user tells you something worth remembering long-term, call remember_fact. ")
+            append("You are also an autonomous coding and systems agent, all on free tools: run shell commands in Termux with termux_run (python, node, git), test logic with run_javascript, keep projects in the workspace with read_text_file/write_text_file, and work on GitHub with the github_* tools (pull a repo, edit, commit, open pull requests, check CI with github_build_status and read failures with github_failed_log). Install extra skills from GitHub with install_skill. ")
+            append("Work like an engineer: plan briefly, act, check the result, and when a tool returns an error, diagnose the cause from the message, fix it and retry with a different approach (at most 3 attempts, never repeat an identical failing call); call self_check when something keeps failing. Say plainly what you could not do and why, with the exact fix for the user. ")
+            append("Everything you use must be free: never suggest paid services. ")
+            Skills.promptBlock(store).takeIf { it.isNotBlank() }?.let { append(it) }
         }
     }
 }

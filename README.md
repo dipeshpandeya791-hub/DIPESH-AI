@@ -51,6 +51,38 @@ Built with Kotlin, Jetpack Compose and Material 3. The brain is **Google Gemini*
 ### The AI can act (with tool use)
 Weather and forecast, news, internet search (Google-grounded with Gemini), notes, reminders, alarms, calendar, location, contacts, calls, SMS, WhatsApp, flashlight, volume, media keys, navigation, files, notifications, automation **routines** ("save a routine called good morning..."), and screen control. Calls, texts, deletions and screen actions always ask first.
 
+## Autonomous agent mode (100% free)
+
+Everything below uses free tiers, open-source tools and your own hardware. No paid service is needed or suggested.
+
+| Ability | How it works |
+|---|---|
+| **Coding agent** | Writes, reads and edits files in a workspace (`/sdcard/DipeshAI/workspace` with All files access), runs JavaScript in a built-in sandbox (Rhino), and runs real shell commands (Python, Node, git, ssh, ffmpeg) in **Termux**. |
+| **GitHub, natively** | With a free personal access token: list repos, pull a repo as a local working copy, read/write/delete files as commits, branches, pull requests, issues, commit history, CI status and failed-build logs, so it can fix a broken build and push again. |
+| **Remote skills** | `install_skill owner/repo` (or a link to a `SKILL.md`) loads new instructions from GitHub at runtime. Enable, disable, update or remove them in Settings. Skills are text only and never bypass approvals. |
+| **Smart devices** | Roku, Android TV / Fire TV (adb), Tasmota, Shelly, WLED, Home Assistant, IP camera snapshots and live view, generic HTTP devices. Local traffic goes through a private-network-only client; the app still blocks cleartext internet traffic. |
+| **Computers** | Wake-on-LAN, and shell commands over SSH through Termux (key login). |
+| **Excel** | `create_spreadsheet` writes a real `.xlsx` (values, formulas, bold header, column widths) with no library. |
+| **Auto-typing** | `type_lines` types lines into the focused field of any app (chat messages, notes, cell box) and presses Enter/Send after each, after one approval. Capped at 50 lines. |
+| **Secrets vault** | Settings > Developer agent > Secrets (`NAME=value`). Encrypted with the Keystore; the AI uses `{{secret:NAME}}` in `http_request` and never sees the value. |
+| **Self-diagnosis** | Tool errors come back with a concrete fix, the AI retries with a different approach, and `self_check` reports internet, key, Termux, GitHub, storage and accessibility status. |
+| **Voices & languages** | Pick any language the installed speech engine supports (Settings > Voice > More languages). Optional per-situation voice profiles (replies, long briefings, wake acknowledgement, errors) cycle through installed free voices. |
+| **Free AI brains** | Gemini free tier, or any OpenAI-compatible server: Groq and OpenRouter free tiers, or **Ollama** on your PC or in Termux (fully offline, zero cost). |
+
+### One-time Termux setup
+1. Install **Termux from F-Droid** (not the Play Store build).
+2. In Termux run: `mkdir -p ~/.termux && echo 'allow-external-apps=true' >> ~/.termux/termux.properties && termux-reload-settings`
+3. Run: `pkg update -y && pkg install -y git python nodejs openssh android-tools` and `termux-setup-storage`.
+4. Android settings > Apps > DIPESH AI > Permissions > allow **Run commands in Termux environment**.
+5. For a full Linux distro: `pkg install proot-distro && proot-distro install ubuntu`, then ask for `environment: proot:ubuntu`.
+
+### GitHub token
+Create a free token at github.com/settings/tokens (scopes `repo` and `workflow`) and paste it in Settings > Developer agent. Public repos can be read without one.
+
+### Smart device examples
+"Add my Roku TV at 192.168.1.20", "Turn the living room plug off", "Wake my PC", "Mute the TV", "Make a spreadsheet of my expenses and save it", "Type these five messages into WhatsApp".
+Home Assistant needs a long-lived access token saved as a secret and named in the device's secret field. Android TV needs Network debugging enabled and `android-tools` in Termux.
+
 ### Settings
 Profile, appearance, API configuration (with a connection test), **AI personality** presets plus custom instructions, voice settings, **conversation memory** with user controls (view, add, delete, turn off), quick commands, safety options, and a **privacy dashboard** (what is stored, permission status with grant buttons, what leaves the device, erase everything).
 
@@ -148,6 +180,9 @@ app/src/main/java/com/dipesh/ai/
 - Text-to-speech in Nepali depends on a Nepali voice being installed on the phone.
 - Speech recognition uses the phone's own engine; it may beep between listens in hands-free mode and may need internet for Nepali or Hindi.
 - Screen understanding captures one screenshot per approval (an Android 14+ requirement).
+- Excel's cell grid is not a normal text field, so auto-typing into it is unreliable; use `create_spreadsheet` for spreadsheet data.
+- Termux commands, ADB and SSH need the one-time setup above. Wake-on-LAN works only on the same network and if the device has it enabled.
+- Free AI tiers have rate limits; small local models may not support tools, in which case DIPESH falls back to plain chat.
 
 ## License
 MIT

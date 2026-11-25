@@ -88,6 +88,9 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     var hint by mutableStateOf(IDLE_HINT)
         private set
     var banner by mutableStateOf<String?>(null)
+    /** Set to a route name to make the UI navigate there (e.g. "camera"). */
+    var navRequest by mutableStateOf<String?>(null)
+
     var pendingConfirm by mutableStateOf<Confirmation?>(null)
         private set
 
@@ -96,6 +99,17 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     private var silentRetries = 0
 
     init {
+        // a screenshot taken by the user-approved capture service arrives here
+        viewModelScope.launch {
+            ScreenCapture.results.collect { file ->
+                if (file == null) {
+                    banner = "I couldn't capture the screen."
+                } else {
+                    val b64 = withContext(Dispatchers.IO) { ImageUtil.encodeFile(file) }
+                    if (b64 == null) banner = "I couldn't read the screenshot." else send(ScreenCapture.prompt, b64)
+                }
+            }
+        }
         viewModelScope.launch {
             settings.collect { s ->
                 voice.language = s.language
@@ -162,6 +176,19 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         voice.stopListening()
         voice.stopSpeaking()
         awaitingCommand = false
+        if (image == null && LOOK.containsMatchIn(t.lowercase())) {
+            job = viewModelScope.launch {
+                val id = ensureConversation(t)
+                val now = System.currentTimeMillis()
+                db.messages().insert(MessageEntity(conversationId = id, role = "user", text = t, createdAt = now))
+                val reply = "Opening the camera. Frame what you want me to look at, then tap Capture."
+                db.messages().insert(MessageEntity(conversationId = id, role = "assistant", text = reply, createdAt = now + 1))
+                db.conversations().touch(id, now + 1)
+                navRequest = "camera"
+                if (store.settings.value.speakReplies) voice.speak(reply) { onSpeechDone() } else onSpeechDone()
+            }
+            return
+        }
         job = viewModelScope.launch {
             val id = ensureConversation(t)
             db.messages().insert(
@@ -414,5 +441,9 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         private const val IDLE_HINT = "Tap the mic to talk, or type below."
+        private val LOOK = Regex(
+            "what is this|what's this|what is that|what's that|look at this|identify this|what do you see|" +
+                "इसे देख|यह क्या है|ye kya hai|yah kya hai"
+        )
     }
 }

@@ -52,6 +52,23 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
                 "text" to ("string" to "Message text."),
                 "send" to ("boolean" to "true to press Send automatically; the user is asked to approve.")
             ), listOf("target", "text")))
+        put(d("compose_sms", "Open the SMS app with a message ready to send (no permission needed).",
+            mapOf(
+                "target" to ("string" to "Contact name or phone number."),
+                "text" to ("string" to "Message text.")
+            ), listOf("target", "text")))
+        put(d("compose_email", "Open the email app with a draft ready.",
+            mapOf(
+                "to" to ("string" to "Email address (optional)."),
+                "subject" to ("string" to "Subject."),
+                "text" to ("string" to "Body text.")
+            ), listOf("text")))
+        put(d("share_text", "Open Android's share sheet so the user can send text via any app.",
+            mapOf("text" to ("string" to "Text to share.")), listOf("text")))
+        put(d("read_notifications", "Read the user's current notifications (needs notification access; the user is asked to approve).",
+            emptyMap()))
+        put(d("clear_notifications", "Dismiss all clearable notifications (needs notification access; the user is asked to approve).",
+            emptyMap()))
         put(d("get_location", "Get the phone's last known location and address.", emptyMap()))
         put(d("navigate", "Start map navigation or search to a place.",
             mapOf("destination" to ("string" to "Place or address.")), listOf("destination")))
@@ -99,6 +116,14 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
         "read_calendar" -> readCalendar(input.optInt("days", 3).coerceIn(1, 30))
         "add_calendar_event" -> addEvent(input.getString("title"), input.getString("start"))
         "whatsapp_message" -> whatsapp(input.getString("target"), input.getString("text"), input.optBoolean("send", false))
+        "compose_sms" -> composeSms(input.getString("target"), input.getString("text"))
+        "compose_email" -> composeEmail(input.optString("to"), input.optString("subject"), input.getString("text"))
+        "share_text" -> {
+            start(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, input.getString("text")), null))
+            "Opened the share sheet."
+        }
+        "read_notifications" -> readNotifications()
+        "clear_notifications" -> clearNotifications()
         "get_location" -> location()
         "navigate" -> navigate(input.getString("destination"))
         "open_camera" -> { start(Intent(MediaStore.ACTION_IMAGE_CAPTURE)); "Camera opened." }
@@ -204,6 +229,36 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
         return "I opened the chat but couldn't find the Send button. Please tap it."
     }
 
+    private fun composeSms(target: String, text: String): String {
+        val number = resolve(target)?.second ?: return "I couldn't find $target in your contacts."
+        start(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number")).putExtra("sms_body", text))
+        return "The message app is open with your text ready. Tap Send to send it."
+    }
+
+    private fun composeEmail(to: String, subject: String, text: String): String {
+        start(
+            Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:" + to.trim()))
+                .putExtra(Intent.EXTRA_SUBJECT, subject)
+                .putExtra(Intent.EXTRA_TEXT, text)
+        )
+        return "Your email app is open with the draft ready."
+    }
+
+    private fun readNotifications(): String {
+        NotificationService.instance ?: return NO_NOTIFICATIONS
+        if (!store.autoApprove && !ask("Allow DIPESH AI to read your current notifications and share them with the AI?")) return "The user declined."
+        val items = NotificationService.recent.value
+        if (items.isEmpty()) return "There are no notifications right now."
+        return items.take(15).joinToString("\n") { "${it.app}: ${it.title} ${it.text}".trim() }
+    }
+
+    private fun clearNotifications(): String {
+        val svc = NotificationService.instance ?: return NO_NOTIFICATIONS
+        if (!ask("Dismiss all your notifications?")) return "The user declined."
+        svc.cancelAllNotifications()
+        return "Notifications cleared."
+    }
+
     private fun readCalendar(days: Int): String {
         need(Manifest.permission.READ_CALENDAR, "the calendar")
         val now = System.currentTimeMillis()
@@ -297,6 +352,8 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
     }
 
     companion object {
+        const val NO_NOTIFICATIONS =
+            "Notification access is not enabled. Tell the user to open the Control tab and tap 'Turn on notification access'."
         const val NO_SCREEN_CONTROL =
             "Screen control is not enabled. Tell the user to open Settings in the app and tap 'Enable screen control', then turn on DIPESH AI in Accessibility."
     }

@@ -61,6 +61,7 @@ private data class Tab(val route: String, val glyph: String, val label: String)
 private val tabs = listOf(
     Tab("home", "◉", "Home"),
     Tab("chat", "💬", "Chat"),
+    Tab("control", "🎛", "Control"),
     Tab("settings", "⚙", "Settings")
 )
 
@@ -112,6 +113,14 @@ private fun RootContent(vm: AssistantViewModel) {
         }
     }
 
+    // voice/AI asked to open a screen (e.g. "what is this?" opens the camera)
+    LaunchedEffect(vm.navRequest) {
+        vm.navRequest?.let { target ->
+            vm.navRequest = null
+            nav.navigate(target) { launchSingleTop = true }
+        }
+    }
+
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
     Column(Modifier.fillMaxSize().imePadding()) {
@@ -133,6 +142,15 @@ private fun RootContent(vm: AssistantViewModel) {
                 composable("chat") { ChatScreen(vm, onOpenHistory = { nav.navigate("history") }, requestMic = requestMic) }
                 composable("history") {
                     HistoryScreen(vm, onBack = { nav.popBackStack() }, onOpen = { id -> vm.openConversation(id); nav.popBackStack() })
+                }
+                composable("control") {
+                    ControlScreen(
+                        vm, onOpenCamera = { nav.navigate("camera") }, onOpenChat = { goTab("chat") },
+                        onRequestPermissions = { multiLauncher.launch(it) }
+                    )
+                }
+                composable("camera") {
+                    CameraScreen(vm, onClose = { nav.popBackStack() }, onSent = { nav.popBackStack(); goTab("chat") })
                 }
                 composable("settings") { SettingsScreen(vm, onRequestPermissions = { multiLauncher.launch(it) }) }
             }

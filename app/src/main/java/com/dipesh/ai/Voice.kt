@@ -23,22 +23,58 @@ class Voice(private val context: Context) {
     var language: String = "en-US"
         set(value) {
             field = value
-            applyTtsLanguage()
+            applyTts()
+        }
+    var rate: Float = 1.0f
+        set(value) {
+            field = value
+            applyTts()
+        }
+    var pitch: Float = 1.0f
+        set(value) {
+            field = value
+            applyTts()
+        }
+    var voiceName: String = ""
+        set(value) {
+            field = value
+            applyTts()
         }
 
     init {
         tts = TextToSpeech(context.applicationContext) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
-            applyTtsLanguage()
+            applyTts()
         }
     }
 
-    private fun applyTtsLanguage() {
-        if (ttsReady) tts?.setLanguage(Locale.forLanguageTag(language))
+    private fun applyTts() {
+        val engine = tts ?: return
+        if (!ttsReady) return
+        engine.setLanguage(Locale.forLanguageTag(language))
+        engine.setSpeechRate(rate)
+        engine.setPitch(pitch)
+        if (voiceName.isNotEmpty()) {
+            try {
+                engine.voices?.firstOrNull { it.name == voiceName }?.let { engine.voice = it }
+            } catch (_: Exception) {
+            }
+        }
     }
 
-    /** Listen once. onHeard gets the transcript; onFail gets a SpeechRecognizer.ERROR_* code (or -1). */
-    fun listen(onHeard: (String) -> Unit, onFail: (Int) -> Unit) {
+    /** Names of installed voices for the current language. */
+    fun voiceOptions(): List<String> = try {
+        val lang = Locale.forLanguageTag(language).language
+        tts?.voices?.filter { it.locale.language == lang }?.map { it.name }?.sorted() ?: emptyList()
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /**
+     * Listen once. [onHeard] gets the transcript; [onFail] gets a SpeechRecognizer.ERROR_* code (or -1);
+     * [onLevel] gets the live microphone level from 0 to 1 for the sound visualizer.
+     */
+    fun listen(onHeard: (String) -> Unit, onFail: (Int) -> Unit, onLevel: (Float) -> Unit) {
         stopListening()
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onFail(-1)
@@ -49,7 +85,10 @@ class Voice(private val context: Context) {
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
-            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onRmsChanged(rmsdB: Float) {
+                onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
+            }
+
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onPartialResults(partialResults: Bundle?) {}

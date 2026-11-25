@@ -1,59 +1,114 @@
 package com.dipesh.ai
 
 import android.app.Application
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.util.Base64
 import android.os.Handler
 import android.os.Looper
 import android.speech.SpeechRecognizer
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.dipesh.ai.data.ConversationEntity
+import com.dipesh.ai.data.FactEntity
+import com.dipesh.ai.data.MessageEntity
+import com.dipesh.ai.data.NoteEntity
+import com.dipesh.ai.data.Settings
+import com.dipesh.ai.net.networkFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
-import java.io.File
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 enum class Status { IDLE, LISTENING, THINKING, SPEAKING }
 
-class Confirmation(val text: String, val result: java.util.concurrent.CompletableFuture<Boolean>)
+class Confirmation(val text: String, val result: CompletableFuture<Boolean>)
 
+/** The single source of truth for the assistant: conversations, streaming replies and voice state. */
+@OptIn(ExperimentalCoroutinesApi::class)
 class AssistantViewModel(app: Application) : AndroidViewModel(app) {
-    val store = (app as DipeshApp).store
+    private val dipesh = app as DipeshApp
+    val store = dipesh.store
+    private val db = dipesh.db
     private val tools = Tools(app, store)
     private val brain = Brain(store, tools)
     private val voice = Voice(app)
     private val ui = Handler(Looper.getMainLooper())
 
-    val messages = mutableStateListOf<ChatMsg>()
+    // ---------- observable data ----------
+    val settings: StateFlow<Settings> = store.settings
+
+    private val _conversationId = MutableStateFlow<Long?>(null)
+    val conversationId: StateFlow<Long?> = _conversationId.asStateFlow()
+
+    val messages: StateFlow<List<MessageEntity>> = _conversationId
+        .flatMapLatest { id -> if (id == null) flowOf(emptyList()) else db.messages().observe(id) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val conversations: StateFlow<List<ConversationEntity>> = db.conversations().observeAll()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val facts: StateFlow<List<FactEntity>> = db.memory().observeFacts()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val notes: StateFlow<List<NoteEntity>> = db.memory().observeNotes()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val conversationCount: StateFlow<Int> = db.conversations().observeCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val messageCount: StateFlow<Int> = db.messages().observeCount()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    val online: StateFlow<Boolean> = networkFlow(app)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    // ---------- UI state ----------
     var status by mutableStateOf(Status.IDLE)
+        private set
+    var level by mutableFloatStateOf(0f)
+        private set
+    var streamingText by mutableStateOf<String?>(null)
         private set
     var handsFree by mutableStateOf(false)
         private set
-    var hint by mutableStateOf("Tap Talk, type, or turn on Hey Dipesh mode.")
+    var voiceConversation by mutableStateOf(false)
         private set
-
+    var hint by mutableStateOf(IDLE_HINT)
+        private set
+    var banner by mutableStateOf<String?>(null)
     var pendingConfirm by mutableStateOf<Confirmation?>(null)
         private set
 
-    /** Incremented to ask the UI to open the camera. */
-    var cameraRequest by mutableStateOf(0)
-        private set
-
+    private var job: Job? = null
     private var awaitingCommand = false
+    private var silentRetries = 0
 
     init {
-        voice.language = store.language
+        viewModelScope.launch {
+            settings.collect { s ->
+                voice.language = s.language
+                voice.rate = s.speechRate
+                voice.pitch = s.pitch
+                voice.voiceName = s.voiceName
+            }
+        }
         tools.confirm = { text ->
-            val c = Confirmation(text, java.util.concurrent.CompletableFuture())
+            val c = Confirmation(text, CompletableFuture())
             pendingConfirm = c
             try {
-                c.result.get(60, java.util.concurrent.TimeUnit.SECONDS)
+                c.result.get(60, TimeUnit.SECONDS)
             } catch (e: Exception) {
                 false
             } finally {
@@ -66,75 +121,190 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         pendingConfirm?.result?.complete(allow)
     }
 
-    // ----- user actions -----
-    fun onMicTap() {
-        when (status) {
-            Status.IDLE -> listenOnce()
-            Status.LISTENING -> {
-                voice.stopListening()
-                status = Status.IDLE
-            }
-            Status.SPEAKING -> {
-                voice.stopSpeaking()
-                status = Status.IDLE
-            }
-            Status.THINKING -> Unit
+    // ---------- conversations ----------
+    fun newChat() {
+        stopAll(exitModes = false)
+        _conversationId.value = null
+    }
+
+    fun openConversation(id: Long) {
+        stopAll(exitModes = false)
+        _conversationId.value = id
+    }
+
+    fun deleteConversation(id: Long) {
+        viewModelScope.launch {
+            db.conversations().delete(id)
+            if (_conversationId.value == id) _conversationId.value = null
         }
     }
 
-    fun enableHandsFree(on: Boolean) {
-        handsFree = on
-        awaitingCommand = false
-        if (on) {
-            hint = "Say \"Hey Dipesh\" or \"Hey Arena\" followed by your request."
-            if (status == Status.IDLE) listenOnce()
-        } else {
-            voice.stopListening()
-            voice.stopSpeaking()
-            status = Status.IDLE
-            hint = "Tap Talk, type, or turn on Hey Dipesh mode."
+    fun deleteAllConversations() {
+        stopAll(exitModes = false)
+        viewModelScope.launch {
+            db.conversations().deleteAll()
+            _conversationId.value = null
         }
     }
 
-    fun send(text: String) {
+    private suspend fun ensureConversation(firstMessage: String): Long {
+        _conversationId.value?.let { return it }
+        val now = System.currentTimeMillis()
+        val id = db.conversations().insert(ConversationEntity(title = firstMessage.take(40), createdAt = now, updatedAt = now))
+        _conversationId.value = id
+        return id
+    }
+
+    // ---------- sending & generating ----------
+    fun send(text: String, image: String? = null) {
         val t = text.trim()
         if (t.isEmpty() || status == Status.THINKING) return
         voice.stopListening()
         voice.stopSpeaking()
-        process(t)
+        awaitingCommand = false
+        job = viewModelScope.launch {
+            val id = ensureConversation(t)
+            db.messages().insert(
+                MessageEntity(conversationId = id, role = "user", text = t, createdAt = System.currentTimeMillis(), hasImage = image != null)
+            )
+            generate(id, image)
+        }
     }
 
-    fun saveSettings(provider: String, geminiKey: String, apiKey: String, city: String, language: String, autoApprove: Boolean, wakeWords: String) {
-        store.wakeWords = wakeWords
-        store.autoApprove = autoApprove
-        store.provider = provider
-        store.geminiKey = geminiKey
-        store.apiKey = apiKey
-        store.city = city
-        store.language = language
-        voice.language = language
-        hint = "Settings saved."
+    private suspend fun generate(id: Long, image: String?) {
+        status = Status.THINKING
+        streamingText = ""
+        hint = "Thinking…"
+        val history = db.messages().list(id).map { ChatMsg(it.role, it.text) }
+        val last = history.lastOrNull()?.text.orEmpty()
+        val local = if (image == null) runCatching { tools.local(last) }.getOrNull() else null
+        val result = if (local != null) Brain.Result(local) else brain.reply(history, image) { streamingText = it }
+        db.messages().insert(
+            MessageEntity(
+                conversationId = id, role = "assistant", text = result.text,
+                createdAt = System.currentTimeMillis(), isError = result.isError
+            )
+        )
+        db.conversations().touch(id, System.currentTimeMillis())
+        streamingText = null
+        if (!result.isError && store.settings.value.speakReplies) {
+            status = Status.SPEAKING
+            hint = "Speaking…"
+            voice.speak(spokenForm(result.text)) { onSpeechDone() }
+        } else {
+            onSpeechDone()
+        }
     }
 
-    fun clearMemory() {
-        store.clearFacts()
-        store.clearNotes()
-        hint = "Memory and notes cleared."
+    fun regenerate() {
+        if (status == Status.THINKING) return
+        voice.stopSpeaking()
+        job = viewModelScope.launch {
+            val id = _conversationId.value ?: return@launch
+            val last = db.messages().list(id).lastOrNull() ?: return@launch
+            if (last.role == "assistant") db.messages().delete(last.id)
+            if (db.messages().list(id).lastOrNull()?.role == "user") generate(id, null)
+        }
     }
 
-    fun clearChat() {
-        messages.clear()
+    private fun onSpeechDone() {
+        status = Status.IDLE
+        hint = IDLE_HINT
+        if (handsFree || voiceConversation) {
+            if (voiceConversation) awaitingCommand = true
+            listenOnce()
+        }
     }
 
-    // ----- listening -----
+    /** Stops everything in flight. With [exitModes] it also leaves hands-free and voice-conversation modes. */
+    fun stopAll(exitModes: Boolean = true) {
+        job?.cancel()
+        job = null
+        voice.stopListening()
+        voice.stopSpeaking()
+        streamingText = null
+        level = 0f
+        status = Status.IDLE
+        awaitingCommand = false
+        hint = IDLE_HINT
+        if (exitModes) {
+            handsFree = false
+            voiceConversation = false
+        }
+    }
+
+    fun stopSpeaking() {
+        voice.stopSpeaking()
+        if (status == Status.SPEAKING) onSpeechDone()
+    }
+
+    fun speak(text: String) {
+        voice.stopListening()
+        voice.stopSpeaking()
+        status = Status.SPEAKING
+        voice.speak(spokenForm(text)) { status = Status.IDLE }
+    }
+
+    fun previewVoice() = speak("Hello, I'm DIPESH AI. This is how I sound.")
+
+    fun voiceOptions(): List<String> = voice.voiceOptions()
+
+    // ---------- listening ----------
+    fun onMicTap() {
+        when (status) {
+            Status.IDLE -> {
+                awaitingCommand = true
+                listenOnce()
+            }
+            Status.LISTENING -> stopAll(exitModes = false)
+            Status.SPEAKING -> stopSpeaking()
+            Status.THINKING -> stopAll(exitModes = false)
+        }
+    }
+
+    fun enableHandsFree(on: Boolean) {
+        if (on) {
+            voiceConversation = false
+            handsFree = true
+            awaitingCommand = false
+            hint = "Say \"Hey Dipesh\" or \"Hey Arena\" followed by your request."
+            if (status == Status.IDLE) listenOnce()
+        } else {
+            stopAll(exitModes = true)
+        }
+    }
+
+    fun setVoiceConversation(on: Boolean) {
+        if (on) {
+            handsFree = false
+            voiceConversation = true
+            silentRetries = 0
+            awaitingCommand = true
+            if (status == Status.IDLE) listenOnce()
+        } else {
+            stopAll(exitModes = true)
+        }
+    }
+
     private fun listenOnce() {
         status = Status.LISTENING
-        hint = if (handsFree && !awaitingCommand) "Waiting for \"Hey Dipesh\" / \"Hey Arena\"…" else "Listening…"
-        voice.listen(onHeard = { onHeard(it) }, onFail = { onListenError(it) })
+        hint = if (handsFree && !awaitingCommand && !voiceConversation) "Waiting for \"Hey Dipesh\"…" else "Listening…"
+        voice.listen(
+            onHeard = {
+                level = 0f
+                silentRetries = 0
+                onHeard(it)
+            },
+            onFail = {
+                level = 0f
+                onListenError(it)
+            },
+            onLevel = { level = it }
+        )
     }
 
     private fun onHeard(text: String) {
-        if (handsFree && !awaitingCommand) {
+        if (handsFree && !awaitingCommand && !voiceConversation) {
             val wake = wakeRegex().find(text)
             if (wake == null) {
                 listenOnce() // not for me, keep waiting
@@ -146,10 +316,10 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                 status = Status.SPEAKING
                 voice.speak("Yes?") { listenOnce() }
             } else {
-                process(rest)
+                send(rest)
             }
         } else {
-            process(text)
+            send(text)
         }
     }
 
@@ -157,94 +327,29 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         val fatal = code == -1 || code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
         if (fatal) {
             handsFree = false
+            voiceConversation = false
             awaitingCommand = false
             status = Status.IDLE
-            hint = if (code == -1) "Speech recognition isn't available on this phone."
-            else "Microphone permission is needed."
+            hint = if (code == -1) "Speech recognition isn't available on this phone." else "Microphone permission is needed."
+            banner = hint
             return
         }
-        if (handsFree) {
-            awaitingCommand = false
+        if (voiceConversation && ++silentRetries > 3) {
+            voiceConversation = false
+            status = Status.IDLE
+            hint = "Voice conversation ended after a quiet moment."
+            return
+        }
+        if (handsFree || voiceConversation) {
+            if (handsFree) awaitingCommand = false
             status = Status.LISTENING
             ui.postDelayed({
-                if (handsFree && status == Status.LISTENING) listenOnce()
-            }, 700)
+                if ((handsFree || voiceConversation) && status == Status.LISTENING) listenOnce()
+            }, 600)
         } else {
             status = Status.IDLE
-            hint = "I didn't catch that. Tap Talk and try again."
+            hint = "I didn't catch that. Tap the mic and try again."
         }
-    }
-
-    // ----- thinking & speaking -----
-    private fun process(text: String, image: String? = null) {
-        awaitingCommand = false
-        if (image == null && LOOK.containsMatchIn(text.lowercase())) {
-            messages.add(ChatMsg("user", text))
-            val reply = "Opening the camera. Take a photo and I'll tell you what I see."
-            messages.add(ChatMsg("assistant", reply))
-            cameraRequest++
-            status = Status.SPEAKING
-            voice.speak(reply) {
-                status = Status.IDLE
-                if (handsFree) listenOnce()
-            }
-            return
-        }
-        messages.add(ChatMsg("user", if (image != null) "📷 $text" else text))
-        status = Status.THINKING
-        hint = "Thinking…"
-        viewModelScope.launch {
-            val snapshot = messages.toList()
-            val local = if (image == null) runCatching { tools.local(text) }.getOrNull() else null
-            val reply = local ?: brain.reply(snapshot, image)
-            messages.add(ChatMsg("assistant", reply))
-            status = Status.SPEAKING
-            hint = "Speaking…"
-            voice.speak(spokenForm(reply)) {
-                status = Status.IDLE
-                if (handsFree) {
-                    listenOnce()
-                } else {
-                    hint = "Tap Talk or type."
-                }
-            }
-        }
-    }
-
-    /** Opens the camera from the UI (button press). */
-    fun requestCamera() {
-        cameraRequest++
-    }
-
-    /** Sends a photo taken by the camera to the AI together with a question. */
-    fun lookAtPhoto(file: File, question: String?) {
-        if (status == Status.THINKING) return
-        status = Status.THINKING
-        hint = "Looking…"
-        viewModelScope.launch {
-            val b64 = withContext(Dispatchers.IO) { encodeJpeg(file) }
-            if (b64 == null) {
-                status = Status.IDLE
-                hint = "I couldn't read that photo."
-                return@launch
-            }
-            process(question?.takeIf { it.isNotBlank() } ?: "What is this? Identify and describe what you see, briefly.", b64)
-        }
-    }
-
-    private fun encodeJpeg(file: File): String? = try {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(file.path, bounds)
-        var sample = 1
-        while (bounds.outWidth / sample > 1600 || bounds.outHeight / sample > 1600) sample *= 2
-        val bmp = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })
-        if (bmp == null) null else {
-            val out = ByteArrayOutputStream()
-            bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
-            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-        }
-    } catch (e: Exception) {
-        null
     }
 
     private fun wakeRegex(): Regex {
@@ -252,7 +357,55 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         return Regex("(?i)(" + words.joinToString("|") { Regex.escape(it) } + ")")
     }
 
-    private fun spokenForm(s: String) = s.replace(Regex("[*#`_>]"), "").replace("\n", ". ")
+    private fun spokenForm(s: String) =
+        s.replace(Regex("```[\\s\\S]*?```"), " code block. ")
+            .replace(Regex("[*#`_>•]"), "")
+            .replace("\n", ". ")
+
+    // ---------- settings helpers ----------
+    fun update(change: (Settings) -> Settings) = store.update(change)
+
+    fun testConnection() {
+        banner = "Testing connection…"
+        viewModelScope.launch {
+            val r = brain.reply(listOf(ChatMsg("user", "Reply with just the word OK.")), null) {}
+            banner = if (r.isError) r.text else "Connected ✓"
+        }
+    }
+
+    // ---------- memory ----------
+    fun addFact(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) { store.addFact(t) }
+    }
+
+    fun deleteFact(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) { db.memory().deleteFact(id) }
+    }
+
+    fun clearFacts() {
+        viewModelScope.launch(Dispatchers.IO) { store.clearFacts() }
+    }
+
+    fun deleteNote(id: Long) {
+        viewModelScope.launch(Dispatchers.IO) { db.memory().deleteNote(id) }
+    }
+
+    fun clearNotes() {
+        viewModelScope.launch(Dispatchers.IO) { store.clearNotes() }
+    }
+
+    /** Wipes chats, memory, notes, routines and all settings including API keys. */
+    fun eraseEverything() {
+        stopAll(exitModes = true)
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { db.clearAllTables() }
+            store.update { Settings() }
+            _conversationId.value = null
+            banner = "All data erased."
+        }
+    }
 
     override fun onCleared() {
         voice.shutdown()
@@ -260,6 +413,6 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
-        private val LOOK = Regex("what is this|what's this|what is that|what's that|look at this|identify this|what do you see|इसे देख|यह क्या है|ye kya hai|yah kya hai")
+        private const val IDLE_HINT = "Tap the mic to talk, or type below."
     }
 }

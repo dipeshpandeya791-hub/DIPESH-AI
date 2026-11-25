@@ -25,11 +25,12 @@ class Tools(context: Context, private val store: Store) {
     private val phone = PhoneTools(context, store) { confirm(it) }
     private val files = FileTools(context) { confirm(it) }
     private val agent = AgentTools(context, store) { confirm(it) }
+    private val automation = AutomationTools(context, store) { confirm(it) }
 
     // ---------- Tool definitions sent to Claude ----------
     fun schema(): JSONArray {
         val all = baseSchema()
-        for (extra in listOf(phone.schema(), files.schema(), agent.schema())) {
+        for (extra in listOf(phone.schema(), files.schema(), agent.schema(), automation.schema())) {
             for (i in 0 until extra.length()) all.put(extra.getJSONObject(i))
         }
         return all
@@ -163,7 +164,7 @@ class Tools(context: Context, private val store: Store) {
                 launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")))
                 "Opened the dialer with $num."
             }
-            else -> phone.run(name, input) ?: files.run(name, input) ?: agent.run(name, input) ?: "Unknown tool: $name"
+            else -> phone.run(name, input) ?: files.run(name, input) ?: agent.run(name, input) ?: automation.run(name, input) ?: "Unknown tool: $name"
         }
     } catch (e: Exception) {
         "Tool error: ${e.message ?: e.javaClass.simpleName}"

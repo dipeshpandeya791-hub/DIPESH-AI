@@ -255,6 +255,7 @@ class Brain(private val store: Store, private val tools: Tools) {
             append("When the user tells you something worth remembering long-term, call remember_fact. ")
             append("You are also an autonomous coding and systems agent, all on free tools: run shell commands in Termux with termux_run (python, node, git), test logic with run_javascript, keep projects in the workspace with read_text_file/write_text_file, and work on GitHub with the github_* tools (pull a repo, edit, commit, open pull requests, check CI with github_build_status and read failures with github_failed_log). Install extra skills from GitHub with install_skill. ")
             append("Work like an engineer: plan briefly, act, check the result, and when a tool returns an error, diagnose the cause from the message, fix it and retry with a different approach (at most 3 attempts, never repeat an identical failing call); call self_check when something keeps failing. Say plainly what you could not do and why, with the exact fix for the user. ")
+            append("Control smart devices on the home network (TVs, plugs, lights, cameras, computers) with device_list/device_add/device_control and wake_on_lan; build Excel files with create_spreadsheet; type messages or data into the app on screen with type_lines. ")
             append("Everything you use must be free: never suggest paid services. ")
             Skills.promptBlock(store).takeIf { it.isNotBlank() }?.let { append(it) }
         }

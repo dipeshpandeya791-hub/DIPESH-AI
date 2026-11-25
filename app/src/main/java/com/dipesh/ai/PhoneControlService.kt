@@ -68,6 +68,16 @@ class PhoneControlService : AccessibilityService() {
         return node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
     }
 
+    /** Presses Enter/Send in the focused field (API 30+), else taps a visible "Send" button. */
+    fun submit(mode: String): Boolean {
+        if (mode == "none") return true
+        if (mode != "send_button" && Build.VERSION.SDK_INT >= 30) {
+            val node = rootInActiveWindow?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            if (node != null && node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)) return true
+        }
+        return tapText("Send") || tapText("SEND") || tapText("भेज्नुहोस्") || tapText("भेजें")
+    }
+
     fun scroll(forward: Boolean): Boolean {
         fun find(n: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
             if (n == null) return null

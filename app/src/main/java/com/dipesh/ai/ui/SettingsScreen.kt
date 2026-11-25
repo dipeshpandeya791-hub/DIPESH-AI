@@ -300,6 +300,23 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
                 }
             }
             Spacer(Modifier.height(12.dp))
+            Text("Smart devices & computers", color = c.text, fontWeight = FontWeight.SemiBold)
+            Text("Say \"add my Roku TV at 192.168.1.20\" or \"add my PC\" and DIPESH saves it. Supported: Roku, Android TV/Fire TV, Tasmota, Shelly, WLED, Home Assistant, IP cameras, PCs over SSH, Wake-on-LAN.",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+            val devs = remember(s.devices) { try { org.json.JSONArray(s.devices) } catch (_: Exception) { org.json.JSONArray() } }
+            for (i in 0 until devs.length()) {
+                val o = devs.getJSONObject(i)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${o.optString("name")} · ${o.optString("type")} · ${o.optString("host")}", Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium, color = c.text)
+                    Text("✕", Modifier.clickable {
+                        val keep = org.json.JSONArray()
+                        for (k in 0 until devs.length()) if (k != i) keep.put(devs.getJSONObject(k))
+                        vm.update { st -> st.copy(devices = keep.toString()) }
+                    }.padding(8.dp), color = c.danger)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
             Text("Termux (Linux shell)", color = c.text, fontWeight = FontWeight.SemiBold)
             Text("Install Termux free from F-Droid, then ask DIPESH: \"help me set up Termux\".",
                 style = MaterialTheme.typography.bodySmall, color = c.textMuted)

@@ -20,8 +20,19 @@ import java.util.Locale
 class Tools(context: Context, private val store: Store) {
     private val ctx = context.applicationContext
 
+    /** Set by the UI: shows an Allow/Deny prompt and returns the user's answer (blocking). */
+    var confirm: (String) -> Boolean = { false }
+    private val phone = PhoneTools(context, store) { confirm(it) }
+
     // ---------- Tool definitions sent to Claude ----------
-    fun schema(): JSONArray = JSONArray().apply {
+    fun schema(): JSONArray {
+        val all = baseSchema()
+        val extra = phone.schema()
+        for (i in 0 until extra.length()) all.put(extra.getJSONObject(i))
+        return all
+    }
+
+    private fun baseSchema(): JSONArray = JSONArray().apply {
         put(def("get_weather", "Current weather and 3-day forecast for a city.",
             mapOf("city" to ("string" to "City name. Omit to use the user's saved city."))))
         put(def("get_news", "Latest news headlines, optionally about a topic.",
@@ -126,7 +137,7 @@ class Tools(context: Context, private val store: Store) {
                 launch(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$num")))
                 "Opened the dialer with $num."
             }
-            else -> "Unknown tool: $name"
+            else -> phone.run(name, input) ?: "Unknown tool: $name"
         }
     } catch (e: Exception) {
         "Tool error: ${e.message ?: e.javaClass.simpleName}"

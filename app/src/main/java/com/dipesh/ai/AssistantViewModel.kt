@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 
 enum class Status { IDLE, LISTENING, THINKING, SPEAKING }
 
+class Confirmation(val text: String, val result: java.util.concurrent.CompletableFuture<Boolean>)
+
 class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     val store = Store(app)
     private val tools = Tools(app, store)
@@ -29,11 +31,29 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     var hint by mutableStateOf("Tap Talk, type, or turn on Hey Dipesh mode.")
         private set
 
+    var pendingConfirm by mutableStateOf<Confirmation?>(null)
+        private set
+
     private var awaitingCommand = false
 
     init {
         messages.addAll(store.history())
         voice.language = store.language
+        tools.confirm = { text ->
+            val c = Confirmation(text, java.util.concurrent.CompletableFuture())
+            pendingConfirm = c
+            try {
+                c.result.get(60, java.util.concurrent.TimeUnit.SECONDS)
+            } catch (e: Exception) {
+                false
+            } finally {
+                if (pendingConfirm === c) pendingConfirm = null
+            }
+        }
+    }
+
+    fun answerConfirm(allow: Boolean) {
+        pendingConfirm?.result?.complete(allow)
     }
 
     // ----- user actions -----
@@ -74,7 +94,8 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         process(t)
     }
 
-    fun saveSettings(provider: String, geminiKey: String, apiKey: String, city: String, language: String) {
+    fun saveSettings(provider: String, geminiKey: String, apiKey: String, city: String, language: String, autoApprove: Boolean) {
+        store.autoApprove = autoApprove
         store.provider = provider
         store.geminiKey = geminiKey
         store.apiKey = apiKey

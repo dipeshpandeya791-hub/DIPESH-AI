@@ -10,7 +10,8 @@ Built with Kotlin and Jetpack Compose. The brain is **Google Gemini** (default, 
 | Voice | Push-to-talk and hands-free **"Hey Dipesh"** mode, spoken replies. English, Nepali and Hindi |
 | HUD | Animated JARVIS ring display that reacts to listening / thinking / speaking |
 | Live info | Weather and 3-day forecast (Open-Meteo), news headlines (Google News), date and time |
-| Phone control | Open any app, flashlight, volume, battery, set alarms, open dialer, web search |
+| Phone control | Open apps, flashlight, volume, battery, alarms, media keys, camera, maps navigation, settings pages |
+| Deep access | Contacts, phone calls, SMS, calendar, location, and **screen control** (read screen, tap, type, scroll, back/home) through Android Accessibility. Calls and texts always ask for your approval first |
 | Memory | Remembers facts about you, saves notes, keeps chat history, sets reminders (notifications) |
 | Privacy | Settings, memory and history stay on your phone. Only your messages go to the AI service |
 
@@ -52,7 +53,12 @@ app/src/main/java/com/dipesh/ai/
 desktop/                 earlier Python desktop version
 ```
 
+## Phone access
+In the app: **Settings > Grant phone permissions** (contacts, calls, SMS, calendar, location) and **Settings > Enable screen control** (turn on DIPESH AI under Accessibility). Every call, text and screen action shows an Allow / Deny prompt unless you switch that off in Settings.
+
 ## Known limits
+- Android does not let any app silently toggle Wi-Fi, Bluetooth or airplane mode; DIPESH opens the right settings page and can tap the switch for you with screen control on.
+- Reading notifications and files are not included yet.
 - "Hey Dipesh" works while the app is open (screen stays on). Always-on background wake word needs a dedicated wake-word engine and is a future step.
 - Android speech recognition may beep between listens in hands-free mode; that is the system engine.
 - Nepali speech output depends on the phone having a Nepali text-to-speech voice installed.

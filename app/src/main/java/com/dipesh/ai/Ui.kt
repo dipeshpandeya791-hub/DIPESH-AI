@@ -2,7 +2,9 @@ package com.dipesh.ai
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -95,6 +97,7 @@ fun App(vm: AssistantViewModel = viewModel()) {
         if (ok) pending?.invoke()
         pending = null
     }
+    val permsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
     val notifLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
     LaunchedEffect(Unit) {
@@ -194,7 +197,30 @@ fun App(vm: AssistantViewModel = viewModel()) {
         }
     }
 
-    if (showSettings) SettingsDialog(vm) { showSettings = false }
+    vm.pendingConfirm?.let { c ->
+        AlertDialog(
+            onDismissRequest = { vm.answerConfirm(false) },
+            title = { Text("Allow this?") },
+            text = { Text(c.text) },
+            confirmButton = { TextButton(onClick = { vm.answerConfirm(true) }) { Text("Allow") } },
+            dismissButton = { TextButton(onClick = { vm.answerConfirm(false) }) { Text("Deny") } }
+        )
+    }
+
+    if (showSettings) {
+        SettingsDialog(vm, onGrant = {
+            permsLauncher.launch(
+                arrayOf(
+                    Manifest.permission.READ_CONTACTS,
+                    Manifest.permission.CALL_PHONE,
+                    Manifest.permission.SEND_SMS,
+                    Manifest.permission.READ_CALENDAR,
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
+                )
+            )
+        }) { showSettings = false }
+    }
 }
 
 @Composable
@@ -217,7 +243,9 @@ private fun Bubble(m: ChatMsg) {
 private val LANGUAGES = listOf("English" to "en-US", "नेपाली (Nepali)" to "ne-NP", "हिन्दी (Hindi)" to "hi-IN")
 
 @Composable
-private fun SettingsDialog(vm: AssistantViewModel, onClose: () -> Unit) {
+private fun SettingsDialog(vm: AssistantViewModel, onGrant: () -> Unit, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    var autoApprove by remember { mutableStateOf(vm.store.autoApprove) }
     var provider by remember { mutableStateOf(vm.store.provider) }
     var geminiKey by remember { mutableStateOf(vm.store.geminiKey) }
     var key by remember { mutableStateOf(vm.store.apiKey) }
@@ -267,6 +295,23 @@ private fun SettingsDialog(vm: AssistantViewModel, onClose: () -> Unit) {
                         Text(label)
                     }
                 }
+                Text("Phone access", fontWeight = FontWeight.Bold)
+                OutlinedButton(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
+                    Text("Grant phone permissions")
+                }
+                OutlinedButton(
+                    onClick = {
+                        ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (PhoneControlService.instance != null) "Screen control: ON (tap to manage)" else "Enable screen control")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Don't ask before screen actions (not recommended)", modifier = Modifier.weight(1f), fontSize = 13.sp)
+                    Switch(checked = autoApprove, onCheckedChange = { autoApprove = it })
+                }
+                Text("Calls and texts always ask first.", fontSize = 12.sp)
                 Text("What I remember (${facts.size})", fontWeight = FontWeight.Bold)
                 Text(if (facts.isEmpty()) "Nothing yet. Tell me about yourself!" else facts.joinToString("\n• ", prefix = "• "), fontSize = 13.sp)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -276,7 +321,7 @@ private fun SettingsDialog(vm: AssistantViewModel, onClose: () -> Unit) {
             }
         },
         confirmButton = {
-            TextButton(onClick = { vm.saveSettings(provider, geminiKey, key, city, lang); onClose() }) { Text("Save") }
+            TextButton(onClick = { vm.saveSettings(provider, geminiKey, key, city, lang, autoApprove); onClose() }) { Text("Save") }
         },
         dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } }
     )

@@ -165,6 +165,8 @@ class Brain(private val store: Store, private val tools: Tools) {
                 append(facts.joinToString("; "))
                 append(". ")
             }
+            append("To operate other apps, call read_screen to see what is displayed, then tap_text, type_text, scroll_screen or press_button, and check again with read_screen. ")
+            append("Calls and text messages need the user's approval, which the app asks for automatically. ")
             append("When the user tells you something worth remembering long-term, call remember_fact.")
         }
     }

@@ -30,6 +30,11 @@ class Store(context: Context) {
         get() = p.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
         set(v) = p.edit().putString("model", v.trim().ifEmpty { DEFAULT_MODEL }).apply()
 
+    /** If true, screen-control actions run without asking each time (calls and SMS always ask). */
+    var autoApprove: Boolean
+        get() = p.getBoolean("auto_approve", false)
+        set(v) = p.edit().putBoolean("auto_approve", v).apply()
+
     var city: String
         get() = p.getString("city", "") ?: ""
         set(v) = p.edit().putString("city", v.trim()).apply()

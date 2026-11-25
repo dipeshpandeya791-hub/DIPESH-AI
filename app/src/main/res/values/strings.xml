@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">DIPESH AI</string>
+    <string name="accessibility_description">Lets DIPESH AI read the screen and tap, type and scroll for you when you ask. You can turn this off at any time.</string>
 </resources>

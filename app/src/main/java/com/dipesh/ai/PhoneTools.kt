@@ -46,10 +46,10 @@ class PhoneTools(context: Context, private val store: Store, private val ask: (S
                 "title" to ("string" to "Event title."),
                 "start" to ("string" to "Start time as yyyy-MM-dd HH:mm (24h, local time).")
             ), listOf("title", "start")))
-        put(d("get_location", "Get the phone's last known location and address."))
+        put(d("get_location", "Get the phone's last known location and address.", emptyMap()))
         put(d("navigate", "Start map navigation or search to a place.",
             mapOf("destination" to ("string" to "Place or address.")), listOf("destination")))
-        put(d("open_camera", "Open the camera to take a photo."))
+        put(d("open_camera", "Open the camera to take a photo.", emptyMap()))
         put(d("media_control", "Control music/video playback.",
             mapOf("action" to ("string" to "One of: play_pause, next, previous.")), listOf("action")))
         put(d("open_settings", "Open a phone settings page, e.g. to switch Wi-Fi or Bluetooth.",

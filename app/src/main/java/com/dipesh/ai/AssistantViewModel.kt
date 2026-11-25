@@ -274,7 +274,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setVoiceConversation(on: Boolean) {
+    fun switchVoiceConversation(on: Boolean) {
         if (on) {
             handsFree = false
             voiceConversation = true

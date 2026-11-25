@@ -102,7 +102,7 @@ fun ChatScreen(vm: AssistantViewModel, onOpenHistory: () -> Unit, requestMic: ((
                 "🎙 Voice", selected = vm.voiceConversation,
                 onClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    if (vm.voiceConversation) vm.setVoiceConversation(false) else requestMic { vm.setVoiceConversation(true) }
+                    if (vm.voiceConversation) vm.switchVoiceConversation(false) else requestMic { vm.switchVoiceConversation(true) }
                 }
             )
             RoundIcon("＋") { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); vm.newChat() }

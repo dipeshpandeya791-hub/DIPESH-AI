@@ -24,7 +24,7 @@ enum class Status { IDLE, LISTENING, THINKING, SPEAKING }
 class Confirmation(val text: String, val result: java.util.concurrent.CompletableFuture<Boolean>)
 
 class AssistantViewModel(app: Application) : AndroidViewModel(app) {
-    val store = Store(app)
+    val store = (app as DipeshApp).store
     private val tools = Tools(app, store)
     private val brain = Brain(store, tools)
     private val voice = Voice(app)
@@ -48,7 +48,6 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     private var awaitingCommand = false
 
     init {
-        messages.addAll(store.history())
         voice.language = store.language
         tools.confirm = { text ->
             val c = Confirmation(text, java.util.concurrent.CompletableFuture())
@@ -125,7 +124,6 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     fun clearChat() {
         messages.clear()
-        store.saveHistory(messages)
     }
 
     // ----- listening -----
@@ -184,7 +182,6 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             messages.add(ChatMsg("user", text))
             val reply = "Opening the camera. Take a photo and I'll tell you what I see."
             messages.add(ChatMsg("assistant", reply))
-            store.saveHistory(messages)
             cameraRequest++
             status = Status.SPEAKING
             voice.speak(reply) {
@@ -201,7 +198,6 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             val local = if (image == null) runCatching { tools.local(text) }.getOrNull() else null
             val reply = local ?: brain.reply(snapshot, image)
             messages.add(ChatMsg("assistant", reply))
-            store.saveHistory(messages)
             status = Status.SPEAKING
             hint = "Speaking…"
             voice.speak(spokenForm(reply)) {

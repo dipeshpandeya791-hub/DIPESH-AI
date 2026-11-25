@@ -1,118 +1,91 @@
 package com.dipesh.ai
 
-import android.content.Context
-import org.json.JSONArray
-import org.json.JSONObject
+import com.dipesh.ai.data.AppDatabase
+import com.dipesh.ai.data.FactEntity
+import com.dipesh.ai.data.NoteEntity
+import com.dipesh.ai.data.RoutineEntity
+import com.dipesh.ai.data.Settings
+import com.dipesh.ai.data.SettingsRepository
 
 data class ChatMsg(val role: String, val text: String)
 
-/** Small private on-device storage: settings, memory (facts), notes and chat history. */
-class Store(context: Context) {
-    private val p = context.applicationContext.getSharedPreferences("dipesh_ai", Context.MODE_PRIVATE)
+/**
+ * Synchronous facade used by the AI tools. Settings come from DataStore (via an in-memory flow) and
+ * memory/notes/routines from Room. The memory/notes/routines methods touch the database, so call
+ * them from a background thread (the tool loop already runs on Dispatchers.IO).
+ */
+class Store(private val repo: SettingsRepository, private val db: AppDatabase) {
+    val settings get() = repo.state
+    private val s: Settings get() = repo.state.value
 
-    var apiKey: String
-        get() = p.getString("api_key", "") ?: ""
-        set(v) = p.edit().putString("api_key", v.trim()).apply()
+    fun update(change: (Settings) -> Settings) = repo.update(change)
 
     var provider: String
-        get() = p.getString("provider", GEMINI) ?: GEMINI
-        set(v) = p.edit().putString("provider", v).apply()
+        get() = s.provider
+        set(v) = update { it.copy(provider = v) }
 
     var geminiKey: String
-        get() = p.getString("gemini_key", "") ?: ""
-        set(v) = p.edit().putString("gemini_key", v.trim()).apply()
+        get() = s.geminiKey
+        set(v) = update { it.copy(geminiKey = v.trim()) }
+
+    var apiKey: String // Anthropic key
+        get() = s.claudeKey
+        set(v) = update { it.copy(claudeKey = v.trim()) }
 
     var geminiModel: String
-        get() = p.getString("gemini_model", DEFAULT_GEMINI_MODEL) ?: DEFAULT_GEMINI_MODEL
-        set(v) = p.edit().putString("gemini_model", v.trim().ifEmpty { DEFAULT_GEMINI_MODEL }).apply()
+        get() = s.geminiModel
+        set(v) = update { it.copy(geminiModel = v.trim().ifEmpty { Settings.DEFAULT_GEMINI_MODEL }) }
 
-    var model: String
-        get() = p.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
-        set(v) = p.edit().putString("model", v.trim().ifEmpty { DEFAULT_MODEL }).apply()
-
-    /** If true, screen-control actions run without asking each time (calls and SMS always ask). */
-    var autoApprove: Boolean
-        get() = p.getBoolean("auto_approve", false)
-        set(v) = p.edit().putBoolean("auto_approve", v).apply()
-
-    var wakeWords: String
-        get() = p.getString("wake_words", DEFAULT_WAKE) ?: DEFAULT_WAKE
-        set(v) = p.edit().putString("wake_words", v.ifBlank { DEFAULT_WAKE }).apply()
-
-    fun routines(): Map<String, String> {
-        val o = JSONObject(p.getString("routines", "{}") ?: "{}")
-        return o.keys().asSequence().associateWith { o.getString(it) }
-    }
-
-    fun saveRoutine(name: String, steps: String) {
-        val o = JSONObject(p.getString("routines", "{}") ?: "{}")
-        o.put(name.trim().lowercase(), steps)
-        p.edit().putString("routines", o.toString()).apply()
-    }
-
-    fun deleteRoutine(name: String) {
-        val o = JSONObject(p.getString("routines", "{}") ?: "{}")
-        o.remove(name.trim().lowercase())
-        p.edit().putString("routines", o.toString()).apply()
-    }
+    var model: String // Claude model
+        get() = s.claudeModel
+        set(v) = update { it.copy(claudeModel = v.trim().ifEmpty { Settings.DEFAULT_CLAUDE_MODEL }) }
 
     var city: String
-        get() = p.getString("city", "") ?: ""
-        set(v) = p.edit().putString("city", v.trim()).apply()
+        get() = s.city
+        set(v) = update { it.copy(city = v.trim()) }
 
     var language: String
-        get() = p.getString("language", "en-US") ?: "en-US"
-        set(v) = p.edit().putString("language", v).apply()
+        get() = s.language
+        set(v) = update { it.copy(language = v) }
 
-    private fun readList(key: String): MutableList<String> {
-        val a = JSONArray(p.getString(key, "[]") ?: "[]")
-        return MutableList(a.length()) { a.getString(it) }
-    }
+    var wakeWords: String
+        get() = s.wakeWords
+        set(v) = update { it.copy(wakeWords = v.ifBlank { Settings.DEFAULT_WAKE }) }
 
-    private fun writeList(key: String, list: List<String>) {
-        p.edit().putString(key, JSONArray(list).toString()).apply()
-    }
+    var autoApprove: Boolean
+        get() = s.autoApprove
+        set(v) = update { it.copy(autoApprove = v) }
 
-    fun facts(): List<String> = readList("facts")
+    // ---- memory (facts) ----
+    fun facts(): List<String> = if (s.memoryEnabled) db.memory().factTexts() else emptyList()
 
     fun addFact(fact: String) {
-        val l = readList("facts")
-        if (!l.contains(fact)) l.add(fact)
-        writeList("facts", l.takeLast(50))
+        if (!s.memoryEnabled) return
+        val m = db.memory()
+        if (m.countFact(fact) == 0) m.insertFact(FactEntity(text = fact, createdAt = System.currentTimeMillis()))
     }
 
-    fun clearFacts() = writeList("facts", emptyList())
+    fun clearFacts() = db.memory().clearFacts()
 
-    fun notes(): List<String> = readList("notes")
+    // ---- notes ----
+    fun notes(): List<String> = db.memory().noteTexts()
 
-    fun addNote(note: String) {
-        val l = readList("notes")
-        l.add(note)
-        writeList("notes", l.takeLast(200))
-    }
+    fun addNote(note: String) = db.memory().insertNote(NoteEntity(text = note, createdAt = System.currentTimeMillis()))
 
-    fun clearNotes() = writeList("notes", emptyList())
+    fun clearNotes() = db.memory().clearNotes()
 
-    fun history(): List<ChatMsg> {
-        val a = JSONArray(p.getString("history", "[]") ?: "[]")
-        return List(a.length()) {
-            val o = a.getJSONObject(it)
-            ChatMsg(o.getString("role"), o.getString("text"))
-        }
-    }
+    // ---- routines ----
+    fun routines(): Map<String, String> = db.memory().routines().associate { it.name to it.steps }
 
-    fun saveHistory(messages: List<ChatMsg>) {
-        val a = JSONArray()
-        messages.takeLast(40).forEach {
-            a.put(JSONObject().put("role", it.role).put("text", it.text))
-        }
-        p.edit().putString("history", a.toString()).apply()
-    }
+    fun saveRoutine(name: String, steps: String) =
+        db.memory().saveRoutine(RoutineEntity(name.trim().lowercase(), steps))
+
+    fun deleteRoutine(name: String) = db.memory().deleteRoutine(name.trim().lowercase())
 
     companion object {
-        const val DEFAULT_MODEL = "claude-sonnet-5-5"
-        const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
-        const val DEFAULT_WAKE = "dipesh, arena, arina, deepesh, दिपेश, एरीना"
+        const val DEFAULT_MODEL = Settings.DEFAULT_CLAUDE_MODEL
+        const val DEFAULT_GEMINI_MODEL = Settings.DEFAULT_GEMINI_MODEL
+        const val DEFAULT_WAKE = Settings.DEFAULT_WAKE
         const val GEMINI = "gemini"
         const val CLAUDE = "claude"
     }

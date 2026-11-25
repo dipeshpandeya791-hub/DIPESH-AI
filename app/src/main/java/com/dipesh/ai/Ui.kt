@@ -273,7 +273,7 @@ private fun SettingsDialog(vm: AssistantViewModel, onGrant: () -> Unit, onClose:
     var key by remember { mutableStateOf(vm.store.apiKey) }
     var city by remember { mutableStateOf(vm.store.city) }
     var lang by remember { mutableStateOf(vm.store.language) }
-    val facts = remember { vm.store.facts() }
+    val facts = emptyList<String>() // full memory manager arrives in the new Settings screens
 
     AlertDialog(
         onDismissRequest = onClose,

@@ -138,7 +138,10 @@ private fun RootContent(vm: AssistantViewModel) {
                         vm, onOpenChat = { goTab("chat") },
                         onOpenConversation = { id -> vm.openConversation(id); goTab("chat") },
                         requestMic = requestMic,
-                        onNavigate = { target -> if (target in tabs.map { it.route }) goTab(target) else nav.navigate(target) { launchSingleTop = true } }
+                        onNavigate = { target ->
+                            if (target == "features") vm.showFeatures = true
+                            else if (target in tabs.map { it.route }) goTab(target) else nav.navigate(target) { launchSingleTop = true }
+                        }
                     )
                 }
                 composable("chat") { ChatScreen(vm, onOpenHistory = { nav.navigate("history") }, requestMic = requestMic) }
@@ -160,6 +163,8 @@ private fun RootContent(vm: AssistantViewModel) {
                 composable("studio/video") { BuilderScreen("video", vm, onBack = { nav.popBackStack() }) }
                 composable("studio/api") { ApiHubScreen(onBack = { nav.popBackStack() }) }
                 composable("studio/tasks") { TasksScreen(vm, onBack = { nav.popBackStack() }) }
+                composable("studio/videomaker") { VideoMakerScreen(onBack = { nav.popBackStack() }) }
+                composable("studio/offline") { OfflineToolsScreen(onBack = { nav.popBackStack() }) }
                 composable("studio/library") { LibraryScreen(vm, onBack = { nav.popBackStack() }) }
                 composable("settings") { SettingsScreen(vm, onRequestPermissions = { multiLauncher.launch(it) }) }
             }
@@ -203,6 +208,23 @@ private fun RootContent(vm: AssistantViewModel) {
                     }
                 }
             }
+        }
+
+        FeaturesOverlay(
+            visible = vm.showFeatures,
+            onClose = { vm.showFeatures = false },
+            onOpen = { target ->
+                vm.showFeatures = false
+                if (target in tabs.map { it.route }) goTab(target) else nav.navigate(target) { launchSingleTop = true }
+            }
+        )
+    }
+
+    // the floating glass orb asks the app to start listening
+    LaunchedEffect(vm.pendingListen) {
+        if (vm.pendingListen) {
+            vm.pendingListen = false
+            requestMic { if (vm.status == com.dipesh.ai.Status.IDLE) vm.onMicTap() }
         }
     }
 

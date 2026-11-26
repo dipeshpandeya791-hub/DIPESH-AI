@@ -63,11 +63,13 @@ private val modules = listOf(
     Module("studio/video", "🎬", "Video Studio", "Remotion, FFmpeg or MoviePy project templates (render on a computer)"),
     Module("studio/api", "🛰", "Free API Hub", "Weather, currency, countries, holidays, Wikipedia, books, dictionary, translation, earthquakes, air quality"),
     Module("studio/tasks", "✅", "Tasks", "To-do list with CSV export and JSON backup"),
+    Module("studio/videomaker", "🎞", "Video Maker", "Make a 9:16 slideshow video on your phone from captions and pictures"),
+    Module("studio/offline", "🧮", "Offline utilities", "Calculator, unit converter, password generator, text tools, date maths"),
     Module("studio/library", "🗂", "Project Library", "Saved projects, ZIP export, delete")
 )
 
 @Composable
-private fun ScreenHeader(title: String, onBack: (() -> Unit)?) {
+internal fun ScreenHeader(title: String, onBack: (() -> Unit)?) {
     val c = LocalDipeshColors.current
     Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) Text("←", Modifier.clickable(onClick = onBack).padding(end = 14.dp, top = 4.dp, bottom = 4.dp),
@@ -77,7 +79,7 @@ private fun ScreenHeader(title: String, onBack: (() -> Unit)?) {
 }
 
 @Composable
-private fun Page(content: @Composable () -> Unit) {
+internal fun Page(content: @Composable () -> Unit) {
     Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         content(); Spacer(Modifier.height(32.dp))
     }

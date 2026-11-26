@@ -1,4 +1,4 @@
-# DIPESH AI 3.1.0 - Feature status (honest report)
+# DIPESH AI 3.2.0 - Feature status (honest report)
 
 **How to read this.** "CI-verified" means the code compiles in GitHub Actions and, where noted, is covered by automated unit tests that passed in the same run. **Nothing has been tested on a physical Android device by the developer tooling used to build this**, so every screen, permission flow, voice feature and network call needs a real-phone check by you. Features are not marked "works" unless noted.
 
@@ -31,10 +31,10 @@
 - **Developer agent**: Termux commands, GitHub tools, JavaScript sandbox, remote skills, secrets vault, smart-device control, Excel `.xlsx` writer, auto-typing, self-check.
 
 ## Limits and things that are NOT built
-- **Video**: Video Studio generates project templates only. The phone app contains **no video rendering engine**; run Remotion/FFmpeg/MoviePy on a computer.
+- **Video**: Video Studio generates Remotion/FFmpeg/MoviePy project templates (run those on a computer). Separately, **Video Maker** renders a simple slideshow MP4 on the phone (MediaCodec, 720x1280, 30 fps, no audio, fade + zoom + captions). It is basic, not a full editor.
 - **Generated code is never run by the app** (agent, website and video projects). Termux/JS execution by the chat assistant always asks for approval first.
 - **Rule-based fallback** covers only a handful of commands; it is not a full offline assistant.
-- **Offline utilities** beyond tasks/notes/reminders and the fallback are not included.
+- **Offline utilities** now include calculator, unit converter, password generator, text stats/Base64 and date maths (unit-tested pure logic).
 - **AI-written projects** depend on the model following the file format; if it does not, the template is used instead.
 - **Currency**: Frankfurter has no NPR. Holidays: Nager.Date does not cover every country. Translation: MyMemory free tier is limited to roughly 5,000 characters per day.
 - Public APIs are free today and not guaranteed to stay free, unlimited or available.
@@ -45,3 +45,9 @@ Microphone, camera, notifications, contacts/phone/SMS (only when you use those t
 
 ## Security notes
 API keys, GitHub token and secrets are encrypted with the Android Keystore. Exported ZIPs contain only generated files, never keys. `.env.example` files contain placeholders only. No analytics or hidden surveillance.
+
+## Added in 3.2.0 (compile- and unit-test-verified only; NOT tested on a physical device)
+- **Floating glass orb**: circular overlay with pulsating cyan/magenta core, metallic ring and mini sound wave. Needs the "Display over other apps" permission; toggled in Settings. Tap = start listening, drag = move, long-press = hide. Does not restart after reboot.
+- **Holographic command center**: translucent HUD panels, predictive analytics graphs (your real requests/tasks per day with a dashed simple linear-trend projection - not a guarantee) and the central orb.
+- **"Show features" voice/text command**: expands an animated overlay listing every capability grouped by category; "close features" or Back dismisses it. Tapping a card opens that screen.
+- Animations, overlay permission flow, MediaCodec encoding and the orb service are UI/hardware dependent and still need physical-device testing.

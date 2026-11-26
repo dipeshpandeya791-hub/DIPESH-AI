@@ -2,6 +2,7 @@ package com.dipesh.ai.ui
 
 import android.text.format.DateUtils
 import androidx.compose.foundation.clickable
+import com.dipesh.ai.studio.Forecast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -260,14 +261,7 @@ private fun ContentPanel(
     }
 }
 
-// ---------------------------------------------------------------- JARVIS-style HUD panels
-@Composable
-private fun HudLabel(text: String) {
-    val c = LocalDipeshColors.current
-    Text(text, style = MaterialTheme.typography.labelMedium, color = c.cyan, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = 2.sp)
-    Spacer(Modifier.height(6.dp))
-}
-
+// ---------------------------------------------------------------- JARVIS-style holographic HUD
 @Composable
 private fun HudLine(label: String, value: String, ok: Boolean? = null) {
     val c = LocalDipeshColors.current
@@ -278,17 +272,26 @@ private fun HudLine(label: String, value: String, ok: Boolean? = null) {
     }
 }
 
+private fun dayLetters(): List<String> {
+    val cal = java.util.Calendar.getInstance()
+    return (6 downTo 0).map { back ->
+        val d = cal.clone() as java.util.Calendar; d.add(java.util.Calendar.DAY_OF_YEAR, -back)
+        arrayOf("S", "M", "T", "W", "T", "F", "S")[d.get(java.util.Calendar.DAY_OF_WEEK) - 1]
+    }
+}
+
 @Composable
 private fun HudPanels(vm: AssistantViewModel, onNavigate: (String) -> Unit) {
     val c = LocalDipeshColors.current
     val settings by vm.settings.collectAsStateWithLifecycle()
     val online by vm.online.collectAsStateWithLifecycle()
     val messages by vm.messages.collectAsStateWithLifecycle()
+    val weekly by vm.weeklyActivity.collectAsStateWithLifecycle()
     val keyReady = when (settings.provider) { "gemini" -> settings.geminiKey.isNotBlank(); "claude" -> settings.claudeKey.isNotBlank(); else -> true }
 
-    SectionTitle("System status")
-    GlassCard(Modifier.fillMaxWidth()) {
-        HudLabel("SYSTEM STATUS")
+    Spacer(Modifier.height(8.dp))
+    HoloPanel(Modifier.fillMaxWidth()) {
+        HoloLabel("SYSTEM STATUS")
         HudLine("AI core", if (keyReady) "Ready · ${settings.provider}" else "Add API key in Settings", keyReady)
         HudLine("Network", if (online) "Online" else "Offline", online)
         HudLine("Microphone", when { vm.handsFree -> "Hands-free ON"; vm.voiceConversation -> "Voice chat ON"; else -> "Off" }, if (vm.handsFree || vm.voiceConversation) true else null)
@@ -296,8 +299,25 @@ private fun HudPanels(vm: AssistantViewModel, onNavigate: (String) -> Unit) {
         HudLine("Language", settings.language)
     }
     Spacer(Modifier.height(10.dp))
-    GlassCard(Modifier.fillMaxWidth()) {
-        HudLabel("VOICE LOG")
+
+    // predictive analytics: real usage data, simple linear-trend forecast (dashed)
+    val taskDays = remember(vm.tasks.toList()) {
+        val start = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0); add(java.util.Calendar.DAY_OF_YEAR, -6) }.timeInMillis
+        val out = IntArray(7); vm.tasks.forEach { if (it.created >= start) out[((it.created - start) / 86_400_000L).toInt().coerceIn(0, 6)]++ }; out.toList()
+    }
+    HoloPanel(Modifier.fillMaxWidth()) {
+        HoloLabel("PREDICTIVE ANALYTICS")
+        val labels = dayLetters() + listOf("+1", "+2", "+3")
+        val act = weekly.map { it.toDouble() }
+        HoloGraph("Your requests per day · trend ${Forecast.trend(act)}", act.map { it.toFloat() }, Forecast.linear(act, 3).map { it.toFloat() }, labels)
+        Spacer(Modifier.height(10.dp))
+        val tk = taskDays.map { it.toDouble() }
+        HoloGraph("Tasks added per day · trend ${Forecast.trend(tk)}", tk.map { it.toFloat() }, Forecast.linear(tk, 3).map { it.toFloat() }, labels, accent = c.violet)
+        Text("Solid = your real activity. Dashed = a simple linear projection, not a guarantee.", style = MaterialTheme.typography.bodySmall, color = c.textMuted, modifier = Modifier.padding(top = 6.dp))
+    }
+    Spacer(Modifier.height(10.dp))
+    HoloPanel(Modifier.fillMaxWidth()) {
+        HoloLabel("VOICE LOG")
         val recent = messages.takeLast(3)
         if (recent.isEmpty()) Text("No activity yet. Say \"Hey Dipesh\" or tap the orb.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
         recent.forEach { m ->
@@ -307,23 +327,25 @@ private fun HudPanels(vm: AssistantViewModel, onNavigate: (String) -> Unit) {
         }
     }
     Spacer(Modifier.height(10.dp))
-    GlassCard(Modifier.fillMaxWidth(), onClick = { onNavigate("studio/tasks") }) {
-        HudLabel("CURRENT TASKS")
+    HoloPanel(Modifier.fillMaxWidth(), onClick = { onNavigate("studio/tasks") }) {
+        HoloLabel("CURRENT TASKS")
         val open = vm.tasks.filter { !it.done }
         if (open.isEmpty()) Text("Nothing pending. Tap to add tasks.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
         open.take(3).forEach { Text("[ ${it.title} ]", style = MaterialTheme.typography.bodySmall, color = c.text, maxLines = 1, modifier = Modifier.padding(vertical = 2.dp)) }
         if (open.size > 3) Text("+${open.size - 3} more", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
     }
     Spacer(Modifier.height(10.dp))
-    GlassCard(Modifier.fillMaxWidth()) {
-        HudLabel("ASSISTANT OPTIONS")
+    HoloPanel(Modifier.fillMaxWidth()) {
+        HoloLabel("ASSISTANT OPTIONS")
         val options = listOf(
             "🎤" to "chat", "🔎" to "studio/api", "✅" to "studio/tasks",
             "🤖" to "studio/agent", "🌐" to "studio/website", "🎬" to "studio/video",
-            "🗂" to "studio/library", "🎛" to "control", "⚙" to "settings"
+            "🎞" to "studio/videomaker", "🧮" to "studio/offline", "🗂" to "studio/library",
+            "🎛" to "control", "⚙" to "settings", "✨" to "features"
         )
         val names = mapOf("chat" to "Voice/Chat", "studio/api" to "API Hub", "studio/tasks" to "Tasks", "studio/agent" to "Agents",
-            "studio/website" to "Websites", "studio/video" to "Video", "studio/library" to "Library", "control" to "Control", "settings" to "Settings")
+            "studio/website" to "Websites", "studio/video" to "Video kits", "studio/videomaker" to "Video Maker", "studio/offline" to "Utilities",
+            "studio/library" to "Library", "control" to "Control", "settings" to "Settings", "features" to "All features")
         options.chunked(3).forEach { row ->
             Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 row.forEach { (icon, route) ->

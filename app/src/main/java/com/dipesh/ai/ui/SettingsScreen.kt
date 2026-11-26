@@ -324,6 +324,32 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
             )
         }
 
+        // ---------------- Floating widget ----------------
+        SectionTitle("Floating glass orb")
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text(
+                "A small glowing orb that floats over other apps. Tap it to start listening, drag to move it, long-press to hide it. Needs the \"Display over other apps\" permission.",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted
+            )
+            Spacer(Modifier.height(8.dp))
+            var widgetOn by remember { mutableStateOf(com.dipesh.ai.FloatingWidgetService.enabled(ctx)) }
+            SettingRow("Show floating orb") {
+                GlassSwitch(widgetOn) { v ->
+                    if (v) {
+                        if (!com.dipesh.ai.FloatingWidgetService.canDraw(ctx)) {
+                            ctx.startActivity(com.dipesh.ai.FloatingWidgetService.overlaySettingsIntent(ctx).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        } else {
+                            com.dipesh.ai.FloatingWidgetService.setEnabled(ctx, true)
+                            widgetOn = com.dipesh.ai.FloatingWidgetService.start(ctx)
+                        }
+                    } else {
+                        com.dipesh.ai.FloatingWidgetService.setEnabled(ctx, false)
+                        com.dipesh.ai.FloatingWidgetService.stop(ctx); widgetOn = false
+                    }
+                }
+            }
+        }
+
         // ---------------- Developer agent ----------------
         SectionTitle("Developer agent (free)")
         GlassCard(Modifier.fillMaxWidth()) {

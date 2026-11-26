@@ -28,6 +28,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,6 +91,27 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         private set
     var hint by mutableStateOf(IDLE_HINT)
         private set
+    /** Holographic capabilities overlay (opened by voice command, the HUD tile or the floating widget). */
+    var showFeatures by mutableStateOf(false)
+    /** Set when the floating widget asks the app to start listening. */
+    var pendingListen by mutableStateOf(false)
+
+    /** User messages per day for the last 7 days (oldest first), for the predictive graph. */
+    val weeklyActivity: StateFlow<List<Int>> = db.messages().observeCount()
+        .flatMapLatest { db.messages().observeUserTimes(dayStart(-6)) }
+        .map { times ->
+            val start = dayStart(-6)
+            val out = IntArray(7)
+            times.forEach { out[((it - start) / 86_400_000L).toInt().coerceIn(0, 6)]++ }
+            out.toList()
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, List(7) { 0 })
+
+    private fun dayStart(offsetDays: Int): Long = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+        add(java.util.Calendar.DAY_OF_YEAR, offsetDays)
+    }.timeInMillis
+
     var banner by mutableStateOf<String?>(null)
     /** Set to a route name to make the UI navigate there (e.g. "camera"). */
     var navRequest by mutableStateOf<String?>(null)
@@ -102,6 +124,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     private var silentRetries = 0
 
     init {
+        WidgetBus.provider = { status.name }
         // a screenshot taken by the user-approved capture service arrives here
         viewModelScope.launch {
             ScreenCapture.results.collect { file ->
@@ -181,6 +204,12 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         voice.stopListening()
         voice.stopSpeaking()
         awaitingCommand = false
+        // Holographic display commands work with no AI key and are never sent to the model.
+        when (RuleBased.parse(t)) {
+            RuleBased.Intent.ShowFeatures -> { localCommand(t, "Here is everything I can do.") { showFeatures = true }; return }
+            RuleBased.Intent.HideFeatures -> if (showFeatures) { localCommand(t, "Closing the display.") { showFeatures = false }; return }
+            else -> {}
+        }
         if (image == null && LOOK.containsMatchIn(t.lowercase())) {
             job = viewModelScope.launch {
                 val id = ensureConversation(t)
@@ -228,6 +257,19 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             voice.speak(result.text, "error") { onSpeechDone() }
         } else {
             onSpeechDone()
+        }
+    }
+
+    /** Runs a local action, records the exchange in the chat and speaks the reply (keeps hands-free mode going). */
+    private fun localCommand(userText: String, reply: String, action: () -> Unit) {
+        action()
+        job = viewModelScope.launch {
+            val id = ensureConversation(userText)
+            val now = System.currentTimeMillis()
+            db.messages().insert(MessageEntity(conversationId = id, role = "user", text = userText, createdAt = now))
+            db.messages().insert(MessageEntity(conversationId = id, role = "assistant", text = reply, createdAt = now + 1))
+            db.conversations().touch(id, now + 1)
+            if (store.settings.value.speakReplies) { status = Status.SPEAKING; voice.speak(reply) { onSpeechDone() } } else onSpeechDone()
         }
     }
 
@@ -517,6 +559,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        WidgetBus.provider = null
         VoiceKeepAliveService.onStopRequested = null
         VoiceKeepAliveService.stop(getApplication())
         voice.shutdown()

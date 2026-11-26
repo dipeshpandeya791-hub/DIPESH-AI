@@ -10,6 +10,8 @@ object RuleBased {
         object Time : Intent()
         object Date : Intent()
         object Greeting : Intent()
+        object ShowFeatures : Intent()
+        object HideFeatures : Intent()
         class OpenApp(val name: String) : Intent()
         class Flashlight(val on: Boolean) : Intent()
     }
@@ -17,6 +19,8 @@ object RuleBased {
     fun parse(text: String): Intent? {
         val t = text.trim().lowercase().trimEnd('.', '!', '?')
         if (t.isEmpty()) return null
+        if (Regex("(show|display|open|list|reveal|expand).{0,20}(features|capabilities|abilities)|what can you do|what are your (features|capabilities)|show everything|features dikhao|फीचर्स? (दिखाओ|दिखा)|सुविधा(हरू)? देखाउ|क्षमता").containsMatchIn(t)) return Intent.ShowFeatures
+        if (Regex("(hide|close|dismiss|exit|collapse).{0,20}(features|capabilities|abilities|overlay|panel|display|hologram)|^(close|hide) (it|this)$|^(close|hide)$").containsMatchIn(t)) return Intent.HideFeatures
         Regex("^(?:please )?(?:open|launch|start) (.+)$").find(t)?.let { return Intent.OpenApp(it.groupValues[1].trim()) }
         if (Regex("flashlight|torch").containsMatchIn(t))
             return Intent.Flashlight(!Regex("\\b(off|disable|close)\\b").containsMatchIn(t))

@@ -52,6 +52,9 @@ interface MessageDao {
 
     @Query("SELECT COUNT(*) FROM messages")
     fun observeCount(): Flow<Int>
+
+    @Query("SELECT createdAt FROM messages WHERE role = 'user' AND createdAt >= :since")
+    fun observeUserTimes(since: Long): Flow<List<Long>>
 }
 
 /** Facts, notes and routines. Plain (non-suspend) methods: call from a background thread. */

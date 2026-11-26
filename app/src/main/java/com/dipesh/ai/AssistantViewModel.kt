@@ -125,6 +125,16 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         WidgetBus.provider = { status.name }
+        WidgetBus.levelProvider = { level }
+        // tapping the Yeti talks to the assistant right here: starts a voice conversation (mic stays on until tapped again)
+        WidgetBus.onTap = {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(getApplication(), android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) false
+            else {
+                ui.post { if (handsFree || voiceConversation || status != Status.IDLE) stopAll(exitModes = true) else switchVoiceConversation(true) }
+                true
+            }
+        }
         // a screenshot taken by the user-approved capture service arrives here
         viewModelScope.launch {
             ScreenCapture.results.collect { file ->
@@ -144,6 +154,11 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                 voice.voiceName = s.voiceName
                 voice.situationVoices = s.situationVoices
                 voice.cycleVoices = s.cycleVoices
+                voice.naturalEnabled = s.naturalVoice
+                voice.geminiKey = s.geminiKey
+                voice.geminiVoice = s.geminiVoice
+                voice.geminiTone = s.geminiTone
+                voice.geminiModel = s.geminiTtsModel
             }
         }
         tools.confirm = { text ->
@@ -275,6 +290,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         )
         db.conversations().touch(id, System.currentTimeMillis())
         streamingText = null
+        WidgetBus.post(if (result.isError) "error" else "success")
         if (!result.isError && store.settings.value.speakReplies) {
             status = Status.SPEAKING
             hint = "Speaking…"
@@ -518,7 +534,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleTask(id: Long) {
         val i = tasks.indexOfFirst { it.id == id }
-        if (i >= 0) { tasks[i] = tasks[i].copy(done = !tasks[i].done); saveTasks() }
+        if (i >= 0) { tasks[i] = tasks[i].copy(done = !tasks[i].done); saveTasks(); if (tasks[i].done) WidgetBus.post("celebrate") }
     }
 
     fun deleteTask(id: Long) { tasks.removeAll { it.id == id }; saveTasks() }
@@ -587,6 +603,8 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         WidgetBus.provider = null
+        WidgetBus.levelProvider = null
+        WidgetBus.onTap = null
         VoiceKeepAliveService.onStopRequested = null
         VoiceKeepAliveService.stop(getApplication())
         voice.shutdown()

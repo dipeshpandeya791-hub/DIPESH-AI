@@ -188,7 +188,85 @@ class Voice(private val context: Context) {
         recognizer = null
     }
 
+    // ---- natural (Gemini) speech ----
+    var naturalEnabled = false
+    var geminiKey = ""
+    var geminiVoice = "Aoede"
+    var geminiTone = "Natural"
+    var geminiModel = GeminiTts.DEFAULT_MODEL
+    @Volatile private var naturalUntil = 0L   // free-tier rate limit: use the phone voice until this time
+    @Volatile private var speakToken = 0
+    @Volatile private var track: android.media.AudioTrack? = null
+
+    private fun naturalAvailable() = naturalEnabled && geminiKey.isNotBlank() && System.currentTimeMillis() >= naturalUntil
+
     fun speak(text: String, situation: String = "reply", finished: () -> Unit) {
+        if (text.isNotBlank() && naturalAvailable()) speakNatural(text, situation, finished) else speakDevice(text, situation, finished)
+    }
+
+    private fun speakNatural(text: String, situation: String, finished: () -> Unit) {
+        stopSpeaking()
+        val token = ++speakToken
+        val chunks = GeminiTts.chunk(text.replace(Regex("\\s+"), " "))
+        if (chunks.isEmpty()) { finished(); return }
+        val tone = if (situation == "error") "Empathetic" else geminiTone
+        val key = geminiKey; val model = geminiModel; val voiceName = geminiVoice
+        val queue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+        val done = ByteArray(0)
+        var played = false
+        // fetcher: stays one sentence ahead of playback
+        Thread {
+            try {
+                for (c in chunks) {
+                    if (token != speakToken) return@Thread
+                    queue.put(GeminiTts.synthesize(key, model, c, voiceName, tone))
+                }
+                queue.put(done)
+            } catch (e: Exception) {
+                if (e is GeminiTts.Failure && e.code == 429) naturalUntil = System.currentTimeMillis() + 90_000
+                else if (e is GeminiTts.Failure && (e.code == 400 || e.code == 403 || e.code == 404)) naturalUntil = System.currentTimeMillis() + 10 * 60_000
+                else naturalUntil = System.currentTimeMillis() + 20_000
+                queue.put(ByteArray(1)) // failure marker
+            }
+        }.start()
+        Thread {
+            var at: android.media.AudioTrack? = null
+            try {
+                val min = android.media.AudioTrack.getMinBufferSize(GeminiTts.SAMPLE_RATE, android.media.AudioFormat.CHANNEL_OUT_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT)
+                at = android.media.AudioTrack.Builder()
+                    .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_ASSISTANT).setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    .setAudioFormat(android.media.AudioFormat.Builder().setSampleRate(GeminiTts.SAMPLE_RATE).setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+                    .setBufferSizeInBytes(maxOf(min, 8192) * 4).setTransferMode(android.media.AudioTrack.MODE_STREAM).build()
+                track = at; at.play()
+                while (token == speakToken) {
+                    val pcm = queue.poll(30, java.util.concurrent.TimeUnit.SECONDS) ?: break
+                    if (pcm === done) { break }
+                    if (pcm.size == 1) { if (!played) { ui.post { if (token == speakToken) speakDevice(text, situation, finished) }; at.release(); track = null; return@Thread }; break }
+                    played = true
+                    var off = 0
+                    while (off < pcm.size && token == speakToken) {
+                        val n = minOf(2400, pcm.size - off)
+                        at.write(pcm, off, n)
+                        WidgetBus.mouth = GeminiTts.level(pcm, off, n)
+                        off += n
+                    }
+                }
+                if (token == speakToken) {
+                    // let the buffered tail finish before reporting "done"
+                    try { Thread.sleep(250) } catch (_: Exception) {}
+                    at.stop()
+                }
+            } catch (_: Exception) {
+            } finally {
+                WidgetBus.mouth = 0f
+                try { at?.release() } catch (_: Exception) {}
+                if (track === at) track = null
+                if (token == speakToken) ui.post { if (token == speakToken) finished() }
+            }
+        }.start()
+    }
+
+    private fun speakDevice(text: String, situation: String, finished: () -> Unit) {
         val engine = tts
         if (!ttsReady || engine == null || text.isBlank()) {
             finished()
@@ -219,6 +297,10 @@ class Voice(private val context: Context) {
     }
 
     fun stopSpeaking() {
+        speakToken++
+        WidgetBus.mouth = 0f
+        try { track?.pause(); track?.flush(); track?.release() } catch (_: Exception) {}
+        track = null
         tts?.stop()
     }
 

@@ -71,6 +71,10 @@ class SettingsRepository(private val context: Context, private val scope: Corout
         val OPENAI_KEY = stringPreferencesKey("openai_key_enc")
         val OPENAI_MODEL = stringPreferencesKey("openai_model")
         val CYCLE = booleanPreferencesKey("cycle_voices")
+        val NATURAL = booleanPreferencesKey("natural_voice")
+        val G_VOICE = stringPreferencesKey("gemini_voice")
+        val G_TONE = stringPreferencesKey("gemini_tone")
+        val G_TTS_MODEL = stringPreferencesKey("gemini_tts_model")
 
         fun Preferences.toSettings(): Settings {
             val d = Settings()
@@ -102,7 +106,11 @@ class SettingsRepository(private val context: Context, private val scope: Corout
                 openaiUrl = this[OPENAI_URL] ?: d.openaiUrl,
                 openaiKey = SecretBox.decrypt(this[OPENAI_KEY] ?: ""),
                 openaiModel = this[OPENAI_MODEL] ?: d.openaiModel,
-                cycleVoices = this[CYCLE] ?: d.cycleVoices
+                cycleVoices = this[CYCLE] ?: d.cycleVoices,
+                naturalVoice = this[NATURAL] ?: d.naturalVoice,
+                geminiVoice = this[G_VOICE] ?: d.geminiVoice,
+                geminiTone = this[G_TONE] ?: d.geminiTone,
+                geminiTtsModel = this[G_TTS_MODEL] ?: d.geminiTtsModel
             )
         }
 
@@ -135,6 +143,10 @@ class SettingsRepository(private val context: Context, private val scope: Corout
             this[OPENAI_KEY] = SecretBox.encrypt(s.openaiKey)
             this[OPENAI_MODEL] = s.openaiModel
             this[CYCLE] = s.cycleVoices
+            this[NATURAL] = s.naturalVoice
+            this[G_VOICE] = s.geminiVoice
+            this[G_TONE] = s.geminiTone
+            this[G_TTS_MODEL] = s.geminiTtsModel
         }
     }
 }

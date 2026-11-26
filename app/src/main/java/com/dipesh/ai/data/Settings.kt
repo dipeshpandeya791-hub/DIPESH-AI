@@ -29,7 +29,11 @@ data class Settings(
     val openaiUrl: String = "http://localhost:11434/v1", // free OpenAI-compatible endpoint (Ollama, Groq, OpenRouter...)
     val openaiKey: String = "",
     val openaiModel: String = "llama3.2",
-    val cycleVoices: Boolean = false
+    val cycleVoices: Boolean = false,
+    val naturalVoice: Boolean = true, // Gemini speech (needs the Gemini key); falls back to the phone voice
+    val geminiVoice: String = "Aoede",
+    val geminiTone: String = "Natural",
+    val geminiTtsModel: String = "gemini-2.5-flash-preview-tts"
 ) {
     companion object {
         const val DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"

@@ -39,6 +39,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import com.dipesh.ai.Skills
 import androidx.compose.ui.Modifier
@@ -324,16 +327,62 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
             )
         }
 
-        // ---------------- Floating widget ----------------
-        SectionTitle("Floating glass orb")
+        // ---------------- Natural voice ----------------
+        SectionTitle("Natural voice (Gemini)")
         GlassCard(Modifier.fillMaxWidth()) {
             Text(
-                "A small glowing orb that floats over other apps. Tap it to start listening, drag to move it, long-press to hide it. Needs the \"Display over other apps\" permission.",
+                "Human-sounding speech from Gemini's free text-to-speech, using your Gemini key. If the key is missing, the free limit is reached or you are offline, DIPESH AI automatically uses the phone's own voice instead.",
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted
+            )
+            Spacer(Modifier.height(8.dp))
+            SettingRow("Use natural voice") {
+                GlassSwitch(s.naturalVoice) { v -> vm.update { it.copy(naturalVoice = v) } }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text("Emotional delivery", style = MaterialTheme.typography.titleSmall, color = c.text)
+            Spacer(Modifier.height(6.dp))
+            ChipRow {
+                com.dipesh.ai.GeminiTts.tones.keys.forEach { t ->
+                    GlassChip(t, s.geminiTone == t, { vm.update { it.copy(geminiTone = t) } })
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            Text("Voice cast (${com.dipesh.ai.GeminiTts.voices.size})   Selected: ${s.geminiVoice}", style = MaterialTheme.typography.titleSmall, color = c.text)
+            Spacer(Modifier.height(6.dp))
+            var group by remember { mutableStateOf("All") }
+            ChipRow { com.dipesh.ai.GeminiTts.groups.forEach { g -> GlassChip(g, group == g, { group = g }) } }
+            Spacer(Modifier.height(6.dp))
+            com.dipesh.ai.GeminiTts.voices.filter { group == "All" || it.group == group }.forEach { v ->
+                val sel = s.geminiVoice == v.name
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, if (sel) c.violet else c.glassBorderLo, RoundedCornerShape(14.dp))
+                        .clickable { vm.update { it.copy(geminiVoice = v.name) }; vm.previewVoice() }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(v.name, style = MaterialTheme.typography.titleSmall, color = c.text)
+                        Text(v.trait, style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+                    }
+                    Text(if (sel) "✓" else "▶", color = if (sel) c.violet else c.textMuted)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlineButton("Preview selected voice", { vm.previewVoice() })
+        }
+
+        // ---------------- Yeti pet ----------------
+        SectionTitle("Floating Yeti pet")
+        GlassCard(Modifier.fillMaxWidth()) {
+            Text(
+                "A little Yeti that lives on your screen above other apps, with no bubble or panel around it. Tap it to talk to DIPESH AI (tap again to turn the mic off), drag it anywhere, long-press to tickle it. It sleeps when idle and wakes when touched. Needs the \"Display over other apps\" permission.",
                 style = MaterialTheme.typography.bodySmall, color = c.textMuted
             )
             Spacer(Modifier.height(8.dp))
             var widgetOn by remember { mutableStateOf(com.dipesh.ai.FloatingWidgetService.enabled(ctx)) }
-            SettingRow("Show floating orb") {
+            SettingRow("Show the Yeti") {
                 GlassSwitch(widgetOn) { v ->
                     if (v) {
                         if (!com.dipesh.ai.FloatingWidgetService.canDraw(ctx)) {
@@ -348,6 +397,22 @@ fun SettingsScreen(vm: AssistantViewModel, onRequestPermissions: (Array<String>)
                     }
                 }
             }
+            Spacer(Modifier.height(6.dp))
+            var size by remember { mutableStateOf(com.dipesh.ai.pet.PetPrefs.size(ctx)) }
+            Text("Size", style = MaterialTheme.typography.titleSmall, color = c.text)
+            Spacer(Modifier.height(6.dp))
+            ChipRow {
+                com.dipesh.ai.pet.PetPrefs.sizes.keys.forEach { n ->
+                    GlassChip(n, size == n, { size = n; com.dipesh.ai.pet.PetPrefs.setSize(ctx, n) })
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            var phones by remember { mutableStateOf(com.dipesh.ai.pet.PetPrefs.headphones(ctx)) }
+            SettingRow("Futuristic headphones") { GlassSwitch(phones) { v -> phones = v; com.dipesh.ai.pet.PetPrefs.setHeadphones(ctx, v) } }
+            var wander by remember { mutableStateOf(com.dipesh.ai.pet.PetPrefs.wander(ctx)) }
+            SettingRow("Walk around on its own", "Off keeps the Yeti where you put it. Less movement also saves battery.") { GlassSwitch(wander) { v -> wander = v; com.dipesh.ai.pet.PetPrefs.setWander(ctx, v) } }
+            var sleepy by remember { mutableStateOf(com.dipesh.ai.pet.PetPrefs.sleepy(ctx)) }
+            SettingRow("Sleep when idle", "Falls asleep after a minute or so of no activity and draws far less.") { GlassSwitch(sleepy) { v -> sleepy = v; com.dipesh.ai.pet.PetPrefs.setSleepy(ctx, v) } }
         }
 
         // ---------------- Developer agent ----------------

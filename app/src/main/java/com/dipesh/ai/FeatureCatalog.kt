@@ -9,6 +9,8 @@ object FeatureCatalog {
 
     val all = listOf(
         Feature("Talk & listen", "🎙", "Voice chat", "Talk hands-free; say \"Hey Dipesh\" while the mic is on", "chat"),
+        Feature("Talk & listen", "🗣", "Natural Gemini voices", "30 human-sounding voices with emotional delivery; falls back to the phone voice", "settings"),
+        Feature("Talk & listen", "🐾", "Floating Yeti pet", "A tiny animated Yeti on your screen: tap to talk, drag to move, it sleeps and wakes", "settings"),
         Feature("Talk & listen", "🌍", "Languages & voices", "Any language your phone's speech engine has, with voices per situation", "settings"),
         Feature("See & understand", "📷", "Camera vision", "Point the camera and ask what you see", "camera"),
         Feature("See & understand", "🖥", "Screen reading", "Understand what is on your screen (with your consent)", "control"),

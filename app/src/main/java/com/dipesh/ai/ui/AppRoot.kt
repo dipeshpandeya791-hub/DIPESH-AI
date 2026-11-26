@@ -124,6 +124,7 @@ private fun RootContent(vm: AssistantViewModel) {
 
     val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().imePadding()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             NavHost(
@@ -210,6 +211,9 @@ private fun RootContent(vm: AssistantViewModel) {
             }
         }
 
+    }
+
+        // full-screen holographic overlay sits ABOVE the layout (a sibling of the Column, never inside it)
         FeaturesOverlay(
             visible = vm.showFeatures,
             onClose = { vm.showFeatures = false },

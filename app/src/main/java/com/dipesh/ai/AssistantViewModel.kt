@@ -16,6 +16,9 @@ import com.dipesh.ai.data.MessageEntity
 import com.dipesh.ai.data.NoteEntity
 import com.dipesh.ai.data.Settings
 import com.dipesh.ai.net.networkFlow
+import com.dipesh.ai.studio.ProjectLibrary
+import com.dipesh.ai.studio.TaskItem
+import com.dipesh.ai.studio.TaskRepo
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -429,6 +432,37 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             val r = brain.reply(listOf(ChatMsg("user", "Reply with just the word OK.")), null) {}
             banner = if (r.isError) r.text else "Connected ✓"
         }
+    }
+
+    // ---------- studio: projects and tasks ----------
+    val library = ProjectLibrary(java.io.File(app.filesDir, "projects"))
+    private val taskRepo = TaskRepo(java.io.File(app.filesDir, "tasks.json"))
+    val tasks = androidx.compose.runtime.mutableStateListOf<TaskItem>().also { it.addAll(taskRepo.load()) }
+
+    private fun saveTasks() = taskRepo.save(tasks.toList())
+
+    fun addTask(title: String, due: String) {
+        if (title.isBlank()) return
+        tasks.add(0, TaskItem(System.currentTimeMillis(), title.trim().take(300), false, due.trim().take(40)))
+        saveTasks()
+    }
+
+    fun toggleTask(id: Long) {
+        val i = tasks.indexOfFirst { it.id == id }
+        if (i >= 0) { tasks[i] = tasks[i].copy(done = !tasks[i].done); saveTasks() }
+    }
+
+    fun deleteTask(id: Long) { tasks.removeAll { it.id == id }; saveTasks() }
+
+    fun clearDoneTasks() { tasks.removeAll { it.done }; saveTasks() }
+
+    fun replaceTasks(list: List<TaskItem>) { tasks.clear(); tasks.addAll(list); saveTasks() }
+
+    /** Asks the configured AI to write project files. Nothing it returns is ever executed. */
+    suspend fun askForFiles(prompt: String): String = withContext(Dispatchers.IO) {
+        val r = brain.reply(listOf(ChatMsg("user", prompt)), null) {}
+        if (r.isError) throw IllegalStateException(r.text)
+        r.text
     }
 
     // ---------- developer agent ----------

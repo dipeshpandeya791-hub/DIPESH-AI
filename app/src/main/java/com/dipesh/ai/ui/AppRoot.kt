@@ -62,6 +62,7 @@ private val tabs = listOf(
     Tab("home", "◉", "Home"),
     Tab("chat", "💬", "Chat"),
     Tab("control", "🎛", "Control"),
+    Tab("studio", "🛠", "Studio"),
     Tab("settings", "⚙", "Settings")
 )
 
@@ -136,7 +137,8 @@ private fun RootContent(vm: AssistantViewModel) {
                     HomeScreen(
                         vm, onOpenChat = { goTab("chat") },
                         onOpenConversation = { id -> vm.openConversation(id); goTab("chat") },
-                        requestMic = requestMic
+                        requestMic = requestMic,
+                        onNavigate = { target -> if (target in tabs.map { it.route }) goTab(target) else nav.navigate(target) { launchSingleTop = true } }
                     )
                 }
                 composable("chat") { ChatScreen(vm, onOpenHistory = { nav.navigate("history") }, requestMic = requestMic) }
@@ -152,6 +154,13 @@ private fun RootContent(vm: AssistantViewModel) {
                 composable("camera") {
                     CameraScreen(vm, onClose = { nav.popBackStack() }, onSent = { nav.popBackStack(); goTab("chat") })
                 }
+                composable("studio") { StudioHomeScreen(onOpen = { nav.navigate(it) { launchSingleTop = true } }) }
+                composable("studio/agent") { BuilderScreen("agent", vm, onBack = { nav.popBackStack() }) }
+                composable("studio/website") { BuilderScreen("website", vm, onBack = { nav.popBackStack() }) }
+                composable("studio/video") { BuilderScreen("video", vm, onBack = { nav.popBackStack() }) }
+                composable("studio/api") { ApiHubScreen(onBack = { nav.popBackStack() }) }
+                composable("studio/tasks") { TasksScreen(vm, onBack = { nav.popBackStack() }) }
+                composable("studio/library") { LibraryScreen(vm, onBack = { nav.popBackStack() }) }
                 composable("settings") { SettingsScreen(vm, onRequestPermissions = { multiLauncher.launch(it) }) }
             }
 
@@ -166,13 +175,13 @@ private fun RootContent(vm: AssistantViewModel) {
             Banner(banner, Modifier.align(Alignment.TopCenter)) { vm.banner = null }
         }
 
-        AnimatedVisibility(visible = !imeVisible && route in tabs.map { it.route }) {
+        AnimatedVisibility(visible = !imeVisible && (route in tabs.map { it.route } || route?.startsWith("studio") == true)) {
             Row(
                 Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp)
                     .glass(RoundedCornerShape(28.dp), c).padding(6.dp)
             ) {
                 tabs.forEach { t ->
-                    val selected = route == t.route
+                    val selected = route == t.route || (t.route == "studio" && route?.startsWith("studio/") == true)
                     Column(
                         Modifier.weight(1f).clip(RoundedCornerShape(22.dp))
                             .then(

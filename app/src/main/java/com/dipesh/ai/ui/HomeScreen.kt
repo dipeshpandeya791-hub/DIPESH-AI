@@ -69,7 +69,8 @@ fun HomeScreen(
     vm: AssistantViewModel,
     onOpenChat: () -> Unit,
     onOpenConversation: (Long) -> Unit,
-    requestMic: (() -> Unit) -> Unit
+    requestMic: (() -> Unit) -> Unit,
+    onNavigate: (String) -> Unit = {}
 ) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val online by vm.online.collectAsStateWithLifecycle()
@@ -89,7 +90,7 @@ fun HomeScreen(
                     OrbPanel(vm, minOf(maxH * 0.55f, 380.dp), requestMic, haptic)
                 }
                 Column(Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 12.dp)) {
-                    ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands)
+                    ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands, onNavigate)
                     Spacer(Modifier.height(24.dp))
                 }
             }
@@ -100,7 +101,7 @@ fun HomeScreen(
             ) {
                 Header(settings.userName, settings.language, vm.status, online)
                 OrbPanel(vm, minOf(maxW * 0.72f, 300.dp), requestMic, haptic)
-                Column(Modifier.fillMaxWidth()) { ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands) }
+                Column(Modifier.fillMaxWidth()) { ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands, onNavigate) }
                 Spacer(Modifier.height(24.dp))
             }
         }
@@ -194,13 +195,16 @@ private fun ContentPanel(
     onOpenChat: () -> Unit,
     onOpenConversation: (Long) -> Unit,
     haptic: HapticFeedback,
-    quickCommands: String
+    quickCommands: String,
+    onNavigate: (String) -> Unit
 ) {
     val c = LocalDipeshColors.current
     val messages by vm.messages.collectAsStateWithLifecycle()
     val conversations by vm.conversations.collectAsStateWithLifecycle()
     val streaming = vm.streamingText
     val lastReply = messages.lastOrNull { it.role == "assistant" }
+
+    HudPanels(vm, onNavigate)
 
     if (streaming != null || lastReply != null) {
         SectionTitle("Latest reply")
@@ -250,6 +254,83 @@ private fun ContentPanel(
                         DateUtils.getRelativeTimeSpanString(convo.updatedAt, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString(),
                         style = MaterialTheme.typography.bodySmall, color = c.textMuted
                     )
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------- JARVIS-style HUD panels
+@Composable
+private fun HudLabel(text: String) {
+    val c = LocalDipeshColors.current
+    Text(text, style = MaterialTheme.typography.labelMedium, color = c.cyan, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, letterSpacing = 2.sp)
+    Spacer(Modifier.height(6.dp))
+}
+
+@Composable
+private fun HudLine(label: String, value: String, ok: Boolean? = null) {
+    val c = LocalDipeshColors.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+        Text(value, style = MaterialTheme.typography.bodySmall,
+            color = when (ok) { true -> c.success; false -> c.danger; null -> c.text })
+    }
+}
+
+@Composable
+private fun HudPanels(vm: AssistantViewModel, onNavigate: (String) -> Unit) {
+    val c = LocalDipeshColors.current
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    val online by vm.online.collectAsStateWithLifecycle()
+    val messages by vm.messages.collectAsStateWithLifecycle()
+    val keyReady = when (settings.provider) { "gemini" -> settings.geminiKey.isNotBlank(); "claude" -> settings.claudeKey.isNotBlank(); else -> true }
+
+    SectionTitle("System status")
+    GlassCard(Modifier.fillMaxWidth()) {
+        HudLabel("SYSTEM STATUS")
+        HudLine("AI core", if (keyReady) "Ready · ${settings.provider}" else "Add API key in Settings", keyReady)
+        HudLine("Network", if (online) "Online" else "Offline", online)
+        HudLine("Microphone", when { vm.handsFree -> "Hands-free ON"; vm.voiceConversation -> "Voice chat ON"; else -> "Off" }, if (vm.handsFree || vm.voiceConversation) true else null)
+        HudLine("Assistant", vm.status.name.lowercase().replaceFirstChar { it.uppercase() })
+        HudLine("Language", settings.language)
+    }
+    Spacer(Modifier.height(10.dp))
+    GlassCard(Modifier.fillMaxWidth()) {
+        HudLabel("VOICE LOG")
+        val recent = messages.takeLast(3)
+        if (recent.isEmpty()) Text("No activity yet. Say \"Hey Dipesh\" or tap the orb.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+        recent.forEach { m ->
+            Text((if (m.role == "user") "You: " else "Assistant: ") + m.text.replace("\n", " ").take(90),
+                style = MaterialTheme.typography.bodySmall, color = if (m.role == "user") c.text else c.violet, maxLines = 2,
+                modifier = Modifier.padding(vertical = 2.dp))
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    GlassCard(Modifier.fillMaxWidth(), onClick = { onNavigate("studio/tasks") }) {
+        HudLabel("CURRENT TASKS")
+        val open = vm.tasks.filter { !it.done }
+        if (open.isEmpty()) Text("Nothing pending. Tap to add tasks.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+        open.take(3).forEach { Text("[ ${it.title} ]", style = MaterialTheme.typography.bodySmall, color = c.text, maxLines = 1, modifier = Modifier.padding(vertical = 2.dp)) }
+        if (open.size > 3) Text("+${open.size - 3} more", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+    }
+    Spacer(Modifier.height(10.dp))
+    GlassCard(Modifier.fillMaxWidth()) {
+        HudLabel("ASSISTANT OPTIONS")
+        val options = listOf(
+            "🎤" to "chat", "🔎" to "studio/api", "✅" to "studio/tasks",
+            "🤖" to "studio/agent", "🌐" to "studio/website", "🎬" to "studio/video",
+            "🗂" to "studio/library", "🎛" to "control", "⚙" to "settings"
+        )
+        val names = mapOf("chat" to "Voice/Chat", "studio/api" to "API Hub", "studio/tasks" to "Tasks", "studio/agent" to "Agents",
+            "studio/website" to "Websites", "studio/video" to "Video", "studio/library" to "Library", "control" to "Control", "settings" to "Settings")
+        options.chunked(3).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                row.forEach { (icon, route) ->
+                    Column(Modifier.weight(1f).clickable { onNavigate(route) }.padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(icon, fontSize = 24.sp)
+                        Text(names[route].orEmpty(), style = MaterialTheme.typography.labelSmall, color = c.textMuted, maxLines = 1)
+                    }
                 }
             }
         }

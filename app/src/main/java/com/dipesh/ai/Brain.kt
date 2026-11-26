@@ -38,6 +38,7 @@ class Brain(private val store: Store, private val tools: Tools) {
                     RuleBased.Intent.Greeting -> "Hello! I'm DIPESH AI. Add an API key in Settings to unlock my full brain."
                     is RuleBased.Intent.OpenApp -> tools.run("open_app", JSONObject().put("name", intent.name))
                     is RuleBased.Intent.Flashlight -> tools.run("flashlight", JSONObject().put("on", intent.on))
+                    RuleBased.Intent.ShowFeatures, RuleBased.Intent.HideFeatures -> null
                     null -> null
                 }
                 if (offline != null) { onText(offline); return@withContext Result(offline) }

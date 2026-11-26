@@ -124,4 +124,14 @@ class StudioTest {
         assertTrue(ApiHub.quakes("""{"features":[{"properties":{"mag":5.1,"place":"Somewhere"}}]}""").contains("M5.1"))
         assertEquals(10, ApiHub.services.size)
     }
+
+    @Test fun ruleBasedFallbackUnderstandsBasics() {
+        assertTrue(RuleBased.parse("what time is it?") is RuleBased.Intent.Time)
+        assertTrue(RuleBased.parse("What's the date") is RuleBased.Intent.Date)
+        assertEquals("whatsapp", (RuleBased.parse("Open WhatsApp") as RuleBased.Intent.OpenApp).name)
+        assertTrue((RuleBased.parse("turn the flashlight on") as RuleBased.Intent.Flashlight).on)
+        assertFalse((RuleBased.parse("flashlight off") as RuleBased.Intent.Flashlight).on)
+        assertTrue(RuleBased.parse("hello there") is RuleBased.Intent.Greeting)
+        assertNull(RuleBased.parse("explain quantum physics"))
+    }
 }

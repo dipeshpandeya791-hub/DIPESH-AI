@@ -31,6 +31,16 @@ class Brain(private val store: Store, private val tools: Tools) {
             val key = if (gemini) store.geminiKey else store.apiKey
             if (!openai && key.isBlank()) {
                 val which = if (gemini) "Gemini" else "Anthropic"
+                // Rule-based fallback: a few things work with no AI key at all.
+                val offline = when (val intent = RuleBased.parse(history.lastOrNull { it.role == "user" }?.text.orEmpty())) {
+                    RuleBased.Intent.Time -> RuleBased.timeText()
+                    RuleBased.Intent.Date -> RuleBased.dateText()
+                    RuleBased.Intent.Greeting -> "Hello! I'm DIPESH AI. Add an API key in Settings to unlock my full brain."
+                    is RuleBased.Intent.OpenApp -> tools.run("open_app", JSONObject().put("name", intent.name))
+                    is RuleBased.Intent.Flashlight -> tools.run("flashlight", JSONObject().put("on", intent.on))
+                    null -> null
+                }
+                if (offline != null) { onText(offline); return@withContext Result(offline) }
                 return@withContext Result(
                     "My AI brain is offline. Open Settings, then AI & API, and paste your $which API key. " +
                         "Until then I can still tell the time, open apps and control the flashlight.",

@@ -51,6 +51,12 @@ Built with Kotlin, Jetpack Compose and Material 3. The brain is **Google Gemini*
 ### The AI can act (with tool use)
 Weather and forecast, news, internet search (Google-grounded with Gemini), notes, reminders, alarms, calendar, location, contacts, calls, SMS, WhatsApp, flashlight, volume, media keys, navigation, files, notifications, automation **routines** ("save a routine called good morning..."), and screen control. Calls, texts, deletions and screen actions always ask first.
 
+## Studio (new in 3.1)
+The **Studio** tab holds the builders and tools: **Agent Builder**, **Website Studio**, **Video Studio** (Remotion, FFmpeg or MoviePy project templates), **Free API Hub** (Open-Meteo, Frankfurter, REST Countries, Nager.Date, Wikipedia, Open Library, Free Dictionary, MyMemory, USGS, Open-Meteo Air Quality), **Tasks** (CSV export, JSON backup) and the **Project Library** (save, ZIP export). Projects are generated from offline templates, optionally refined by your AI. They are never run automatically.
+The Home screen shows a JARVIS-style HUD (system status, voice log, current tasks, assistant options).
+
+See [docs/FEATURE_STATUS.md](docs/FEATURE_STATUS.md) for what is verified, what is untested on a device, and known limits.
+
 ## Autonomous agent mode (100% free)
 
 Everything below uses free tiers, open-source tools and your own hardware. No paid service is needed or suggested.

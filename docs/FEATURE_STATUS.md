@@ -1,0 +1,47 @@
+# DIPESH AI 3.1.0 - Feature status (honest report)
+
+**How to read this.** "CI-verified" means the code compiles in GitHub Actions and, where noted, is covered by automated unit tests that passed in the same run. **Nothing has been tested on a physical Android device by the developer tooling used to build this**, so every screen, permission flow, voice feature and network call needs a real-phone check by you. Features are not marked "works" unless noted.
+
+## Download and install
+1. GitHub repo > **Actions** > latest green run > **Artifacts** > `DipeshAI-debug-apk` (installable debug build), `DipeshAI-release-apk`, `DipeshAI-release-aab`.
+2. Unzip, copy the `.apk` to the phone, open it, allow "Install unknown apps" for your file manager or browser.
+3. Open DIPESH AI > Settings > AI & API and add a free Gemini key (https://aistudio.google.com/apikey). Free tiers have quotas and can change. Or choose a free Groq/OpenRouter key, or Ollama (no key).
+
+## CI-verified with automated tests
+| Area | What the tests prove |
+|---|---|
+| Unsafe-path protection | `..`, absolute, drive-letter, `~`, backslash tricks and control characters are refused (`SafePath`). |
+| Duplicate-file protection | Case-insensitive duplicates are ignored, never overwritten. |
+| Project templates | Agent, website, Remotion, FFmpeg and MoviePy templates produce multi-file projects with README, safe paths, placeholder-only `.env.example`; HTML in user text is escaped. |
+| ZIP export | Entries live under one root folder; unsafe and duplicate entries are skipped; library save/list/export/delete round-trip. |
+| AI file parsing | Fenced `file:` blocks are parsed; unsafe paths in AI output are refused. |
+| Free API Hub | Query parsers and response parsers for all 10 services (against sample JSON, not live servers). |
+| Tasks | CSV export escaping and spreadsheet-formula-injection guard; JSON backup/restore round-trip. |
+| Rule-based fallback | Time, date, greeting, open app, flashlight intents are recognised. |
+
+## Implemented, compiles in CI, NOT verified on a device
+- **Chat, history, streaming, Gemini/Claude/OpenAI-compatible providers**, model fallback and retry.
+- **Voice**: speech recognition, text-to-speech, wake words, hands-free mode, background listening service (needs your phone's speech service; Xiaomi phones often need the Google app).
+- **Phone integration**: open apps, camera, gallery/file picker, screenshot (MediaProjection with consent), accessibility screen control, calls/SMS/WhatsApp with approval.
+- **Vision**: camera and screenshot images sent to a vision-capable configured provider.
+- **Agent Builder / Website Studio / Video Studio screens**: template generation, optional "Generate with AI", file preview, Save to library, Share ZIP, Save ZIP to Downloads.
+- **Free API Hub** live calls to Open-Meteo, Frankfurter, REST Countries, Nager.Date, Wikipedia, Open Library, Free Dictionary API, MyMemory, USGS, Open-Meteo Air Quality (loading and error states included). Endpoints were written from public documentation and were **not called from a test run**; any of them may have changed.
+- **Tasks screen**, CSV export / JSON backup to Downloads, restore from file; **Project Library** screen.
+- **JARVIS HUD** on Home: system status, voice log, current tasks, assistant options, animated orb.
+- **Developer agent**: Termux commands, GitHub tools, JavaScript sandbox, remote skills, secrets vault, smart-device control, Excel `.xlsx` writer, auto-typing, self-check.
+
+## Limits and things that are NOT built
+- **Video**: Video Studio generates project templates only. The phone app contains **no video rendering engine**; run Remotion/FFmpeg/MoviePy on a computer.
+- **Generated code is never run by the app** (agent, website and video projects). Termux/JS execution by the chat assistant always asks for approval first.
+- **Rule-based fallback** covers only a handful of commands; it is not a full offline assistant.
+- **Offline utilities** beyond tasks/notes/reminders and the fallback are not included.
+- **AI-written projects** depend on the model following the file format; if it does not, the template is used instead.
+- **Currency**: Frankfurter has no NPR. Holidays: Nager.Date does not cover every country. Translation: MyMemory free tier is limited to roughly 5,000 characters per day.
+- Public APIs are free today and not guaranteed to stay free, unlimited or available.
+- The wake word works only while the app/microphone service is running; Android blocks silent Wi-Fi/Bluetooth toggles; screen capture needs consent each time.
+
+## Permissions
+Microphone, camera, notifications, contacts/phone/SMS (only when you use those tools), calendar, location (weather/maps), "All files access" (optional), Accessibility service (optional, for screen control and auto-typing), Notification access (optional), Termux "Run commands" (optional), foreground microphone service while hands-free is on.
+
+## Security notes
+API keys, GitHub token and secrets are encrypted with the Android Keystore. Exported ZIPs contain only generated files, never keys. `.env.example` files contain placeholders only. No analytics or hidden surveillance.

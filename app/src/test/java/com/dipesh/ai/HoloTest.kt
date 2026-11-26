@@ -33,3 +33,26 @@ class HoloTest {
         assertEquals(RuleBased.Intent.HideFeatures, RuleBased.parse("close features"))
     }
 }
+
+class PersonaTest {
+    @Test fun modes() {
+        assertEquals(Persona.Mode.BOSS, Persona.detect("Boss mode"))
+        assertEquals(Persona.Mode.BOSS, Persona.detect("be brief"))
+        assertEquals(Persona.Mode.STUDY, Persona.detect("switch to study mode please"))
+        assertEquals(Persona.Mode.STUDY, Persona.detect("Help me learn"))
+        assertEquals(Persona.Mode.CREATOR, Persona.detect("let's create"))
+        assertEquals(Persona.Mode.CREATOR, Persona.detect("activate creator"))
+        assertEquals(Persona.Mode.NORMAL, Persona.detect("normal mode"))
+        assertNull(Persona.detect("what is the weather"))
+    }
+    @Test fun script() {
+        assertTrue(Persona.isDevanagari("नमस्ते, तपाईंलाई कस्तो छ"))
+        assertFalse(Persona.isDevanagari("hello there"))
+        assertFalse(Persona.isDevanagari("   "))
+    }
+    @Test fun promptBlocks() {
+        assertTrue(Persona.core.contains("AUTO LANGUAGE"))
+        assertTrue(Persona.modeBlock(Persona.Mode.BOSS).contains("Boss"))
+        assertEquals("", Persona.modeBlock(Persona.Mode.NORMAL))
+    }
+}

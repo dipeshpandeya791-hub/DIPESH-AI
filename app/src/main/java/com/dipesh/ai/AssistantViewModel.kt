@@ -200,11 +200,25 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- sending & generating ----------
     fun send(text: String, image: String? = null) {
         val t = text.trim()
-        if (t.isEmpty() || status == Status.THINKING) return
+        if (t.isEmpty() || status == Status.THINKING) {
+            // Ignored input must never leave the mic dead in a voice mode.
+            if (status != Status.THINKING && (handsFree || voiceConversation)) ui.postDelayed({ if ((handsFree || voiceConversation) && status == Status.IDLE) listenOnce() }, 300)
+            return
+        }
         voice.stopListening()
         voice.stopSpeaking()
         awaitingCommand = false
         // Holographic display commands work with no AI key and are never sent to the model.
+        Persona.detect(t)?.let { m ->
+            brain.mode = m
+            val ack = when (m) {
+                Persona.Mode.BOSS -> "Boss mode on. Short and sharp."
+                Persona.Mode.STUDY -> "Study mode on. Let's learn."
+                Persona.Mode.CREATOR -> "Creator mode on. Let's make something."
+                Persona.Mode.NORMAL -> "Back to normal mode."
+            }
+            localCommand(t, ack) {}; return
+        }
         when (RuleBased.parse(t)) {
             RuleBased.Intent.ShowFeatures -> { localCommand(t, "Here is everything I can do.") { showFeatures = true }; return }
             RuleBased.Intent.HideFeatures -> if (showFeatures) { localCommand(t, "Closing the display.") { showFeatures = false }; return }
@@ -233,6 +247,19 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun generate(id: Long, image: String?) {
+        try {
+            generateInner(id, image)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Anything unexpected: say so, and go back to listening instead of leaving the app stuck on "thinking".
+            streamingText = null
+            banner = "Something went wrong: ${e.message?.take(120) ?: e.javaClass.simpleName}"
+            onSpeechDone()
+        }
+    }
+
+    private suspend fun generateInner(id: Long, image: String?) {
         status = Status.THINKING
         streamingText = ""
         hint = "Thinking…"
@@ -325,7 +352,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         voice.stopListening()
         voice.stopSpeaking()
         status = Status.SPEAKING
-        voice.speak(spokenForm(text)) { status = Status.IDLE }
+        voice.speak(spokenForm(text)) { onSpeechDone() }
     }
 
     fun previewVoice() = speak("Hello, I'm DIPESH AI. This is how I sound.")

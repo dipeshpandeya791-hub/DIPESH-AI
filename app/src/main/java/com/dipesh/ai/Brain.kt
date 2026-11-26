@@ -21,6 +21,8 @@ import java.util.Locale
  * on the phone. [onText] receives the full reply so far, which makes streaming UIs trivial.
  */
 class Brain(private val store: Store, private val tools: Tools) {
+    /** Active persona mode; set by the view model when the user says "Boss mode" etc. */
+    @Volatile var mode: Persona.Mode = Persona.Mode.NORMAL
 
     data class Result(val text: String, val isError: Boolean = false)
 
@@ -335,10 +337,11 @@ class Brain(private val store: Store, private val tools: Tools) {
         return buildString {
             append("You are DIPESH AI, a personal voice assistant living on the user's Android phone. ")
             append(persona).append(' ')
+            append(Persona.core).append(Persona.modeBlock(mode))
             if (s.userName.isNotBlank()) append("The user's name is ${s.userName}. ")
             append("Replies are often spoken aloud, so prefer 1-4 short sentences; use markdown lists or code blocks only when they really help. ")
             append("Use your tools to act on the phone and fetch live information instead of guessing. ")
-            append("Reply in the language the user speaks, whichever it is (you know every major language). Preferred language: ${Locale.forLanguageTag(s.language).getDisplayName(Locale.ENGLISH)} (${s.language}). ")
+            append("Default language if the user's language is unclear: ${Locale.forLanguageTag(s.language).getDisplayName(Locale.ENGLISH)} (${s.language}). ")
             append("Current date and time: $now. ")
             if (s.city.isNotBlank()) append("The user's city: ${s.city}. ")
             if (facts.isNotEmpty()) append("Things you remember about the user: ").append(facts.joinToString("; ")).append(". ")

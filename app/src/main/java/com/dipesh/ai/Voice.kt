@@ -114,14 +114,14 @@ class Voice(private val context: Context) {
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
-            override fun onBeginningOfSpeech() {}
+            override fun onBeginningOfSpeech() { rearm(60_000L) }
             override fun onRmsChanged(rmsdB: Float) {
                 onLevel(((rmsdB + 2f) / 12f).coerceIn(0f, 1f))
             }
 
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onPartialResults(partialResults: Bundle?) { rearm(60_000L) }
             override fun onEvent(eventType: Int, params: Bundle?) {}
 
             override fun onError(error: Int) {
@@ -142,11 +142,31 @@ class Voice(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+            // Auto language: also accept Nepali, Hindi and English so switching mid-chat needs no setting change.
+            putStringArrayListExtra("android.speech.extra.ADDITIONAL_LANGUAGES", ArrayList(listOf("en-US", "hi-IN", "ne-NP").filter { it != language }))
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
+        // Watchdog: some phones leave the recognizer hanging with no result and no error, which looks like "mic off".
+        val dog = Runnable {
+            if (recognizer === r) {
+                try { r.cancel(); r.destroy() } catch (_: Exception) {}
+                recognizer = null
+                onFail(SpeechRecognizer.ERROR_SPEECH_TIMEOUT)
+            }
+        }
+        watchdog = dog
+        rearm(25_000L)
         r.startListening(intent)
     }
 
+    private var watchdog: Runnable? = null
+    private fun rearm(ms: Long) { watchdog?.let { ui.removeCallbacks(it); ui.postDelayed(it, ms) } }
+
     private fun release(r: SpeechRecognizer) {
+        watchdog?.let { ui.removeCallbacks(it) }
         ui.post {
             try {
                 r.destroy()
@@ -157,6 +177,7 @@ class Voice(private val context: Context) {
     }
 
     fun stopListening() {
+        watchdog?.let { ui.removeCallbacks(it) }
         recognizer?.let {
             try {
                 it.cancel()
@@ -174,6 +195,14 @@ class Voice(private val context: Context) {
             return
         }
         applyTts(if (situation == "reply" && text.length > 350) "briefing" else situation)
+        // Mirror the reply's language: Devanagari text is spoken with a Nepali/Hindi voice when the engine has one.
+        if (Persona.isDevanagari(text)) {
+            try {
+                val have = engine.availableLanguages ?: emptySet()
+                val pick = listOf("ne-NP", "hi-IN").map { Locale.forLanguageTag(it) }.firstOrNull { l -> have.any { it.language == l.language } }
+                if (pick != null) engine.setLanguage(pick)
+            } catch (_: Exception) {}
+        }
         val id = UUID.randomUUID().toString()
         engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(utteranceId: String?) {}

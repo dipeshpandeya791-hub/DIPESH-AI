@@ -263,6 +263,12 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             handsFree = false
             voiceConversation = false
         }
+        syncKeepAlive()
+        // Interrupting a reply in a mic mode must not switch the mic off: carry on listening.
+        if (!exitModes && (handsFree || voiceConversation)) {
+            if (voiceConversation) awaitingCommand = true
+            ui.postDelayed({ if ((handsFree || voiceConversation) && status == Status.IDLE) listenOnce() }, 400)
+        }
     }
 
     fun stopSpeaking() {
@@ -290,6 +296,8 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- listening ----------
     fun onMicTap() {
+        // While hands-free / voice conversation is on, the mic stays on until the user turns it off: tapping the mic is that "off".
+        if (handsFree || voiceConversation) { stopAll(exitModes = true); return }
         when (status) {
             Status.IDLE -> {
                 awaitingCommand = true
@@ -307,6 +315,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             handsFree = true
             awaitingCommand = false
             hint = "Say \"Hey Dipesh\" or \"Hey Arena\" followed by your request."
+            syncKeepAlive()
             if (status == Status.IDLE) listenOnce()
         } else {
             stopAll(exitModes = true)
@@ -319,9 +328,22 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             voiceConversation = true
             silentRetries = 0
             awaitingCommand = true
+            syncKeepAlive()
             if (status == Status.IDLE) listenOnce()
         } else {
             stopAll(exitModes = true)
+        }
+    }
+
+    /** Runs a foreground microphone service while a mic mode is on, so listening continues in the background. */
+    private fun syncKeepAlive() {
+        val app = getApplication<Application>()
+        if (handsFree || voiceConversation) {
+            VoiceKeepAliveService.onStopRequested = { stopAll(exitModes = true) }
+            VoiceKeepAliveService.start(app)
+        } else {
+            VoiceKeepAliveService.onStopRequested = null
+            VoiceKeepAliveService.stop(app)
         }
     }
 
@@ -371,20 +393,17 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             status = Status.IDLE
             hint = if (code == -1) "Speech recognition isn't available on this phone." else "Microphone permission is needed."
             banner = hint
-            return
-        }
-        if (voiceConversation && ++silentRetries > 3) {
-            voiceConversation = false
-            status = Status.IDLE
-            hint = "Voice conversation ended after a quiet moment."
+            syncKeepAlive()
             return
         }
         if (handsFree || voiceConversation) {
+            // Silence, no match, busy or network hiccups never turn the mic off; keep listening until the user stops it.
             if (handsFree) awaitingCommand = false
             status = Status.LISTENING
+            val quiet = code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
             ui.postDelayed({
                 if ((handsFree || voiceConversation) && status == Status.LISTENING) listenOnce()
-            }, 600)
+            }, if (quiet) 300L else 1500L)
         } else {
             status = Status.IDLE
             hint = "I didn't catch that. Tap the mic and try again."
@@ -464,6 +483,8 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        VoiceKeepAliveService.onStopRequested = null
+        VoiceKeepAliveService.stop(getApplication())
         voice.shutdown()
         super.onCleared()
     }

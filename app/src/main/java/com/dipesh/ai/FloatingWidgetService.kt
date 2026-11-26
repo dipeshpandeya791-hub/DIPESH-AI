@@ -16,6 +16,7 @@ import android.provider.Settings
 import android.view.Gravity
 import android.view.WindowManager
 import com.dipesh.ai.pet.PetPrefs
+import com.dipesh.ai.pet.YetiView
 
 /** Shows the floating Yeti pet (transparent, creature only) over other apps (needs the "Display over other apps" permission). */
 class FloatingWidgetService : Service() {

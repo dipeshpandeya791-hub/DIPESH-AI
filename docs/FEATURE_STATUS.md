@@ -1,4 +1,4 @@
-# DIPESH AI 3.2.0 - Feature status (honest report)
+# DIPESH AI 3.3.0 - Feature status (honest report)
 
 **How to read this.** "CI-verified" means the code compiles in GitHub Actions and, where noted, is covered by automated unit tests that passed in the same run. **Nothing has been tested on a physical Android device by the developer tooling used to build this**, so every screen, permission flow, voice feature and network call needs a real-phone check by you. Features are not marked "works" unless noted.
 
@@ -47,7 +47,12 @@ Microphone, camera, notifications, contacts/phone/SMS (only when you use those t
 API keys, GitHub token and secrets are encrypted with the Android Keystore. Exported ZIPs contain only generated files, never keys. `.env.example` files contain placeholders only. No analytics or hidden surveillance.
 
 ## Added in 3.2.0 (compile- and unit-test-verified only; NOT tested on a physical device)
-- **Floating glass orb**: circular overlay with pulsating cyan/magenta core, metallic ring and mini sound wave. Needs the "Display over other apps" permission; toggled in Settings. Tap = start listening, drag = move, long-press = hide. Does not restart after reboot.
+- **Floating glass orb**: replaced in 3.3.0 by the Yeti pet (below).
 - **Holographic command center**: translucent HUD panels, predictive analytics graphs (your real requests/tasks per day with a dashed simple linear-trend projection - not a guarantee) and the central orb.
 - **"Show features" voice/text command**: expands an animated overlay listing every capability grouped by category; "close features" or Back dismisses it. Tapping a card opens that screen.
 - Animations, overlay permission flow, MediaCodec encoding and the orb service are UI/hardware dependent and still need physical-device testing.
+
+## Added in 3.3.0 (compile- and unit-test-verified only; NOT tested on a physical device, e.g. Redmi 12)
+- **Floating Yeti pet** (replaces the orb): transparent overlay showing only the creature, no bubble or panel. 22 animation states (idle, sit, walk, run, jump, dance, wave, climb at screen edges, sleep, wake, listen, think, speak with mouth sync, happy, excited, curious, surprised, sad, confused, laugh, celebrate, being carried), smooth spring blending, blinking, glancing, breathing, self-chosen idle behaviour, sleeps after about 75 s idle. Tap = start/stop a voice conversation inside the running app (mic stays on until tapped again), drag anywhere, long-press = tickle. Reacts to success, errors and completed tasks. Settings: show/hide, size, headphones, wander, sleep. Position is remembered and kept on screen after rotation. Animation pauses when the screen is off and slows when the pet rests.
+- **Honest limits of the Yeti**: it is a procedurally drawn, lit and shaded character animated in 2.5D on a Canvas, not a Blender-modelled mesh rendered with Filament; no 3D model file or skeletal rig exists in this build. Fur is drawn tufts, not simulated fur. Looks and performance on real hardware are unverified. It does not restart after a reboot, and the overlay needs the "Display over other apps" permission.
+- **Natural Gemini voices**: 30 prebuilt Gemini voices and 9 delivery tones (Natural, Neutral, Joyful, Excited, Calm, Empathetic, Dramatic, Suspenseful, Storyteller) via Gemini text-to-speech using your Gemini key. Speech is generated sentence by sentence so playback starts early, and falls back to the phone's own voice if the key is missing, you are offline, or the free limit (HTTP 429) is hit. The TTS model name (gemini-2.5-flash-preview-tts) is a preview model and may change; free-tier limits apply and are not guaranteed. Not tested on a device.

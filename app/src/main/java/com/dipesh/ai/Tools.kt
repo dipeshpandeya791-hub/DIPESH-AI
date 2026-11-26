@@ -28,9 +28,17 @@ class Tools(context: Context, private val store: Store) {
     private val automation = AutomationTools(context, store) { confirm(it) }
 
     // ---------- Tool definitions sent to Claude ----------
-    fun schema(): JSONArray {
+    fun schema(recent: String? = null): JSONArray {
         val all = baseSchema()
-        for (extra in listOf(phone.schema(), files.schema(), agent.schema(), automation.schema())) {
+        val groups = mutableListOf(phone.schema(), files.schema())
+        // Sending all ~80 tools every turn is slow and burns the free quota, so the developer and
+        // device tools are only offered when the conversation is about them.
+        val wantAgent = recent == null || AGENT_WORDS.containsMatchIn(recent) || NON_LATIN.containsMatchIn(recent)
+        val wantAuto = recent == null || AUTO_WORDS.containsMatchIn(recent) || NON_LATIN.containsMatchIn(recent)
+        if (wantAgent) groups.add(agent.schema())
+        else agent.schema().let { a -> all.put(a.getJSONObject(a.length() - 1)) } // self_check is always available
+        if (wantAuto) groups.add(automation.schema())
+        for (extra in groups) {
             for (i in 0 until extra.length()) all.put(extra.getJSONObject(i))
         }
         return all
@@ -83,8 +91,8 @@ class Tools(context: Context, private val store: Store) {
     }
 
     /** Same tools in Gemini's functionDeclarations format. */
-    fun geminiDeclarations(): JSONArray {
-        val src = schema()
+    fun geminiDeclarations(recent: String? = null): JSONArray {
+        val src = schema(recent)
         val out = JSONArray()
         for (i in 0 until src.length()) {
             val tool = src.getJSONObject(i)
@@ -121,6 +129,12 @@ class Tools(context: Context, private val store: Store) {
                 "input_schema",
                 JSONObject().put("type", "object").put("properties", p).put("required", JSONArray(required))
             )
+    }
+
+    private companion object {
+        val AGENT_WORDS = Regex("(?i)github|\\bgit\\b|repo|commit|branch|pull request|code|coding|script|program|python|node|termux|shell|command|javascript|debug|build|skill|install|\\bapi\\b|http|secret|token|workspace|diagnos|self.?check|not working|error|fix|\\bapp\\b")
+        val AUTO_WORDS = Regex("(?i)device|\\btv\\b|television|roku|plug|light|bulb|lamp|camera|cctv|wake|computer|\\bpc\\b|laptop|ssh|excel|spreadsheet|xlsx|sheet|\\btype\\b|typing|messages|home assistant|tasmota|shelly|wled|android tv|fire ?stick")
+        val NON_LATIN = Regex("[\\u0900-\\u097F\\u0600-\\u06FF\\u0400-\\u04FF\\u4E00-\\u9FFF]")
     }
 
     // ---------- Execute a tool call from Claude ----------

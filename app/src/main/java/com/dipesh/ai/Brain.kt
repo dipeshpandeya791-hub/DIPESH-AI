@@ -69,15 +69,23 @@ class Brain(private val store: Store, private val tools: Tools) {
         var model = store.geminiModel
         val system = systemPrompt()
 
-        repeat(12) {
-            val body = JSONObject()
-                .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
-                .put("contents", contents)
-                .put("tools", JSONArray().put(JSONObject().put("functionDeclarations", tools.geminiDeclarations())))
-                .put("generationConfig", JSONObject().put("maxOutputTokens", 2048))
-                .toString()
+        var withTools = true
+        fun build(): String = JSONObject()
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
+            .put("contents", contents)
+            .apply {
+                if (withTools) put("tools", JSONArray().put(JSONObject().put("functionDeclarations", tools.geminiDeclarations(recentUserText(history)))))
+            }
+            .put("generationConfig", JSONObject().put("maxOutputTokens", 2048))
+            .toString()
 
-            val (stream, used) = openStream(body, model)
+        repeat(12) {
+            val (stream, used) = try {
+                openStream(build(), model)
+            } catch (e: ApiError) {
+                // A rejected tool list must not break chatting: retry once as a plain conversation.
+                if (e.code == 400 && withTools) { withTools = false; openStream(build(), model) } else throw e
+            }
             model = used
             onText("")
 
@@ -180,7 +188,7 @@ class Brain(private val store: Store, private val tools: Tools) {
                 .put("model", store.model)
                 .put("max_tokens", 900)
                 .put("system", system)
-                .put("tools", tools.schema())
+                .put("tools", tools.schema(recentUserText(history)))
                 .put("messages", msgs)
                 .toString()
             val resp = ApiClient.claude.messages(store.apiKey, "2023-06-01", ApiClient.jsonBody(body))
@@ -214,8 +222,8 @@ class Brain(private val store: Store, private val tools: Tools) {
     }
 
     // ---------------- Free OpenAI-compatible servers: Ollama, Groq, OpenRouter, LM Studio... ----------------
-    private fun openAiTools(): JSONArray {
-        val src = tools.schema(); val out = JSONArray()
+    private fun openAiTools(recent: String): JSONArray {
+        val src = tools.schema(recent); val out = JSONArray()
         for (i in 0 until src.length()) {
             val t = src.getJSONObject(i); val sch = t.getJSONObject("input_schema")
             val params = JSONObject().put("type", "object").put("properties", sch.getJSONObject("properties"))
@@ -252,7 +260,7 @@ class Brain(private val store: Store, private val tools: Tools) {
                 .put(JSONObject().put("type", "text").put("text", last.getString("content")))
                 .put(JSONObject().put("type", "image_url").put("image_url", JSONObject().put("url", "data:image/jpeg;base64,$image"))))
         }
-        val toolList = openAiTools()
+        val toolList = openAiTools(recentUserText(history))
         var useTools = true
         repeat(12) {
             val req = JSONObject().put("model", st.openaiModel.ifBlank { "llama3.2" }).put("messages", msgs).put("stream", false)
@@ -282,6 +290,9 @@ class Brain(private val store: Store, private val tools: Tools) {
         }
         return Result("I got stuck in a loop. Please try again.", true)
     }
+
+    private fun recentUserText(history: List<ChatMsg>): String =
+        history.filter { it.role == "user" }.takeLast(3).joinToString(" ") { it.text }
 
     private fun apiError(code: Int, body: String, who: String): String {
         val msg = try {

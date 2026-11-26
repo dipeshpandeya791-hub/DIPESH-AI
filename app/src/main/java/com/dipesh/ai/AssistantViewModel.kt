@@ -391,7 +391,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
             voiceConversation = false
             awaitingCommand = false
             status = Status.IDLE
-            hint = if (code == -1) "Speech recognition isn't available on this phone." else "Microphone permission is needed."
+            hint = if (code == -1) "No speech recognition service found. Install the free Google app (or Speech Recognition & Synthesis from Google) and pick it under Android Settings > Voice input." else "Microphone permission is needed."
             banner = hint
             syncKeepAlive()
             return

@@ -31,6 +31,17 @@ class VoiceKeepAliveService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
+        try {
+            startListeningForeground()
+        } catch (e: Exception) {
+            // Missing microphone permission or background-start limits must never crash the app.
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        return START_NOT_STICKY
+    }
+
+    private fun startListeningForeground() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Voice listening", NotificationManager.IMPORTANCE_LOW))
         val open = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
@@ -43,14 +54,14 @@ class VoiceKeepAliveService : Service() {
             .setContentText("Microphone is on. Tap Stop to turn it off.")
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "Stop", stop).build())
+            .addAction(Notification.Action.Builder(
+                android.graphics.drawable.Icon.createWithResource(this, android.R.drawable.ic_media_pause), "Stop", stop).build())
             .build()
         ServiceCompat.startForeground(this, ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         if (wake == null) {
             wake = getSystemService(PowerManager::class.java)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "dipesh:voice").apply { setReferenceCounted(false); acquire(6 * 60 * 60 * 1000L) }
         }
-        return START_NOT_STICKY
     }
 
     override fun onDestroy() {
@@ -68,6 +79,8 @@ class VoiceKeepAliveService : Service() {
         @Volatile var onStopRequested: (() -> Unit)? = null
 
         fun start(ctx: Context) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, android.Manifest.permission.RECORD_AUDIO)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return
             try { ctx.startForegroundService(Intent(ctx, VoiceKeepAliveService::class.java)) } catch (_: Exception) {}
         }
 

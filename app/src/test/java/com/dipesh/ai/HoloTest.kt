@@ -56,3 +56,15 @@ class PersonaTest {
         assertEquals("", Persona.modeBlock(Persona.Mode.NORMAL))
     }
 }
+
+class LocalShellTest {
+    @Test fun needsTermux() {
+        assertTrue(LocalShell.needsTermux("python3 a.py"))
+        assertTrue(LocalShell.needsTermux("cd x && git status"))
+        assertFalse(LocalShell.needsTermux("ls -la"))
+    }
+    @Test fun formatHint() {
+        assertTrue(LocalShell.format(127, "", "sh: python: not found").contains("Termux"))
+        assertEquals("exit code 0\nstdout:\nhi", LocalShell.format(0, "hi", ""))
+    }
+}

@@ -17,7 +17,7 @@ class AgentTools(context: Context, private val store: Store, private val ask: (S
 
     fun schema(): JSONArray = JSONArray().apply {
         put(toolDef("termux_run",
-            "Run a shell command in Termux (free Linux environment on the phone: python, node, git, ssh, ffmpeg, curl). Returns exit code, stdout and stderr. The user is asked to approve.",
+            "Run a shell command on the phone. Uses Termux (python, node, git, ssh, ffmpeg) when installed; otherwise falls back to the built-in Android shell (ls, cat, echo, grep, cp, mkdir...). Returns exit code, stdout and stderr. The user is asked to approve.",
             mapOf(
                 "command" to ("string" to "Shell command, e.g. 'python3 script.py' or 'git status'."),
                 "workdir" to ("string" to "Optional working directory (Termux path). Default is the Termux home."),
@@ -101,9 +101,15 @@ class AgentTools(context: Context, private val store: Store, private val ask: (S
         return when (name) {
             "termux_run" -> {
                 val cmd = input.getString("command")
-                if (!ask("Run this in Termux?\n\n${cmd.take(400)}")) "The user declined to run that command."
-                else TermuxRunner.run(ctx, cmd, input.optString("workdir"), input.optString("environment").ifBlank { "termux" },
-                    input.optInt("timeout_seconds", 60))
+                val timeout = input.optInt("timeout_seconds", 60)
+                if (!ask("Run this command?\n\n${cmd.take(400)}")) "The user declined to run that command."
+                else if (!TermuxRunner.installed(ctx) || !TermuxRunner.hasPermission(ctx)) {
+                    // No Termux (or no permission): fall back to the phone's own built-in shell instead of failing.
+                    val local = LocalShell.run(cmd, Workspace.dir(ctx), timeout)
+                    val why = if (!TermuxRunner.installed(ctx)) "Termux is not installed" else "Termux permission is not granted"
+                    "(Ran in the phone's built-in shell because $why.)\n$local" +
+                        if (LocalShell.needsTermux(cmd)) "\nNote: python/node/git need Termux. ${TermuxRunner.SETUP_HELP}" else ""
+                } else TermuxRunner.run(ctx, cmd, input.optString("workdir"), input.optString("environment").ifBlank { "termux" }, timeout)
             }
             "termux_setup_help" -> TermuxRunner.SETUP_HELP
             "run_javascript" -> JsSandbox.run(input.getString("code"))

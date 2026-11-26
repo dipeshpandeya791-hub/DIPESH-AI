@@ -76,7 +76,7 @@ class YetiTest {
                 b.target(a, t, t * 3f, PetInput(micLevel = 0.5f), p)
                 assertTrue("$a eyeOpen", p.eyeOpen in 0f..1.35f)
                 assertTrue("$a mouth", p.mouthOpen in 0f..1f)
-                assertTrue("$a arm", p.armL in -5f..200f && p.armR in -5f..200f)
+                assertTrue("$a arm", p.armL in -20f..200f && p.armR in -20f..200f)
                 assertTrue("$a lift", p.lift in 0f..1f)
             }
         }

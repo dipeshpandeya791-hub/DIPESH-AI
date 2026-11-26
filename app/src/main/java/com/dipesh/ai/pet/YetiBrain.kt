@@ -125,11 +125,11 @@ class YetiBrain(private val rnd: java.util.Random = java.util.Random(), private 
         wasStatus = input.status
 
         if (!busy) {
-            if (actLength > 0f && actTime >= actLength) next(nowMs, input)
+            if (act == Act.SLEEPY && actTime >= actLength) start(Act.SLEEP, 0f)
+            else if (actLength > 0f && actTime >= actLength) next(nowMs, input)
             if (!input.wander && (act == Act.WALK || act == Act.RUN || act == Act.CLIMB)) start(Act.IDLE, 3f)
             // inactivity -> sleepy -> sleep
             if (input.sleepWhenIdle && act != Act.SLEEP && act != Act.SLEEPY && nowMs - lastActivityMs > sleepAfterMs) start(Act.SLEEPY, 5f)
-            if (act == Act.SLEEPY && actTime >= actLength) start(Act.SLEEP, 0f)
         }
 
         // blinking and glancing run all the time

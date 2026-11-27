@@ -1,4 +1,4 @@
-# DIPESH AI 3.5.0 - Feature status (honest report)
+# DIPESH AI 3.6.0 - Feature status (honest report)
 
 **How to read this.** "CI-verified" means the code compiles in GitHub Actions and, where noted, is covered by automated unit tests that passed in the same run. **Nothing has been tested on a physical Android device by the developer tooling used to build this**, so every screen, permission flow, voice feature and network call needs a real-phone check by you. Features are not marked "works" unless noted.
 
@@ -72,3 +72,9 @@ Offline smart skills: understood from speech or typing before the AI is asked, s
 - **Daily briefing**: "good morning" / "daily briefing" reads date, weather (needs the city set in Settings and internet; otherwise skipped), open tasks, today's spending and a low-battery warning.
 - **Battery status**: "battery level".
 - Known limits: patterns are matched literally, so unusual wording falls through to the AI; Nepali/Hindi phrasing is not matched offline yet.
+
+## Added in 3.6.0 (compile- and unit-test-verified only; NOT tested on a physical device)
+- **Voice shopping list**: "add milk and rice to my shopping list", "what's on my shopping list", "remove milk from my shopping list", "clear my shopping list". Stored privately on the phone.
+- **Fun & games** (offline): flip a coin, roll a dice or an N-sided die, random number between two values, "pick between A or B", jokes (the Yeti laughs). Joke list is small and built in.
+- **Nepali/Hindi phrases for some skills**: timers and focus ("५ मिनेट टाइमर", "२५ मिनेट फोकस", "2 घण्टा टाइमर"), morning greetings for the briefing ("सुप्रभात", "शुभ प्रभात"), and battery ("बैटरी कति छ"). Devanagari digits are understood. Calculator, conversions, expenses and the shopping list are still English only.
+- **Yeti levels, XP, streak and badges**: +1 XP per message, +2 per expense, +5 per timer, +10 per finished task, +25 per focus session. Levels from Snow Pup to Yeti Legend, a daily-use streak, 8 badges, shown in a "Yeti level" panel on Home. Level-ups make the Yeti celebrate. Stored privately on the phone; no cloud sync or leaderboard.

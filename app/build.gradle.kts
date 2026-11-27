@@ -13,8 +13,8 @@ android {
         applicationId = "com.dipesh.ai"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "3.5.0"
+        versionCode = 9
+        versionName = "3.6.0"
     }
 
     // Release signing: provide KEYSTORE_FILE / KEYSTORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD as

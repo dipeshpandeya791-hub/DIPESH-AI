@@ -388,10 +388,11 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         if (handsFree || voiceConversation) { stopAll(exitModes = true); return }
         when (status) {
             Status.IDLE -> {
-                awaitingCommand = true
-                listenOnce()
+                // One tap = a continuous voice chat: the mic re-opens after every reply and stays on (also in the
+                // background) until the user taps the mic again or presses Stop in the notification.
+                switchVoiceConversation(true)
             }
-            Status.LISTENING -> stopAll(exitModes = false)
+            Status.LISTENING -> stopAll(exitModes = true)
             Status.SPEAKING -> stopSpeaking()
             Status.THINKING -> stopAll(exitModes = false)
         }

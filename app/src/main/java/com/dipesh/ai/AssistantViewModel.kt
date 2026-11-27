@@ -18,7 +18,13 @@ import com.dipesh.ai.data.Settings
 import com.dipesh.ai.net.networkFlow
 import com.dipesh.ai.studio.ExpenseStore
 import com.dipesh.ai.studio.Expenses
+import com.dipesh.ai.studio.Ev
 import com.dipesh.ai.studio.LocalSkills
+import com.dipesh.ai.studio.Progress
+import com.dipesh.ai.studio.ProgressState
+import com.dipesh.ai.studio.ProgressStore
+import com.dipesh.ai.studio.Shopping
+import com.dipesh.ai.studio.ShoppingStore
 import com.dipesh.ai.studio.ProjectLibrary
 import com.dipesh.ai.studio.TaskItem
 import com.dipesh.ai.studio.TaskRepo
@@ -128,6 +134,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         WidgetBus.provider = { status.name }
+        ui.post { progress = progressStore.load() } // after construction, so the lazy stores exist
         WidgetBus.levelProvider = { level }
         // tapping the Yeti talks to the assistant right here: starts a voice conversation (mic stays on until tapped again)
         WidgetBus.onTap = {
@@ -227,6 +234,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         voice.stopSpeaking()
         awaitingCommand = false
         // Holographic display commands work with no AI key and are never sent to the model.
+        award(Ev.COMMAND)
         LocalSkills.parse(t)?.let { skill -> runSkill(t, skill); return }
         Persona.detect(t)?.let { m ->
             brain.mode = m
@@ -314,6 +322,20 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     var timerFocus by androidx.compose.runtime.mutableStateOf(false); private set
     private var timerJob: kotlinx.coroutines.Job? = null
     private val expenseStore by lazy { ExpenseStore(getApplication()) }
+    private val shoppingStore by lazy { ShoppingStore(getApplication()) }
+    private val progressStore by lazy { ProgressStore(getApplication()) }
+
+    /** The Yeti's growth (XP, level, streak, badges); shown on the Home screen. */
+    var progress by androidx.compose.runtime.mutableStateOf(ProgressState()); private set
+
+    private fun today(): Long { val now = System.currentTimeMillis(); return (now + java.util.TimeZone.getDefault().getOffset(now)) / 86_400_000L }
+
+    fun award(ev: Ev) {
+        val (n, up) = Progress.record(progress, ev, today())
+        progress = n
+        progressStore.save(n)
+        if (up) { banner = "Level ${Progress.level(n.xp)}: ${Progress.title(Progress.level(n.xp))}! 🎉"; WidgetBus.post("celebrate") }
+    }
 
     private fun batteryInfo(): Pair<Int, Boolean> {
         val i = getApplication<Application>().registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
@@ -333,6 +355,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     private fun timerDone(focus: Boolean) {
         timerEndsAt = 0L; WidgetBus.focus = false
         WidgetBus.post("celebrate")
+        award(if (focus) Ev.FOCUS else Ev.TIMER)
         val msg = if (focus) "Focus session complete. Nice work!" else "Time's up!"
         banner = msg
         if (status == Status.IDLE || handsFree || voiceConversation) {
@@ -344,7 +367,19 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     private fun runSkill(t: String, skill: LocalSkills.Skill) {
         val now = System.currentTimeMillis()
         when (skill) {
-            is LocalSkills.Skill.Answer -> localCommand(t, skill.reply) {}
+            is LocalSkills.Skill.Answer -> localCommand(t, skill.reply) { skill.event?.let { WidgetBus.post(it) } }
+            is LocalSkills.Skill.ShopAdd -> {
+                val before = shoppingStore.load(); val after = Shopping.add(before, skill.items); shoppingStore.save(after)
+                val added = after.size - before.size
+                localCommand(t, if (added == 0) "Those are already on your shopping list." else "Added ${skill.items.joinToString(", ")} to your shopping list. It has ${after.size} item${if (after.size == 1) "" else "s"} now.") {}
+            }
+            is LocalSkills.Skill.ShopRemove -> {
+                val (after, hit) = Shopping.remove(shoppingStore.load(), skill.item)
+                if (hit) shoppingStore.save(after)
+                localCommand(t, if (hit) "Removed ${skill.item} from your shopping list." else "I couldn't find ${skill.item} on your shopping list.") {}
+            }
+            LocalSkills.Skill.ShopShow -> localCommand(t, Shopping.describe(shoppingStore.load())) {}
+            LocalSkills.Skill.ShopClear -> localCommand(t, "Shopping list cleared.") { shoppingStore.save(emptyList()) }
             is LocalSkills.Skill.Timer -> {
                 cancelTimer()
                 timerEndsAt = now + skill.seconds * 1000L; timerFocus = skill.focus; WidgetBus.focus = skill.focus
@@ -358,7 +393,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
                 val left = ((timerEndsAt - now) / 1000L).toInt()
                 localCommand(t, if (timerEndsAt > 0L && left > 0) "${LocalSkills.durationText(left)} left." else "No timer is running.") {}
             }
-            is LocalSkills.Skill.Spend -> localCommand(t, "Noted: Rs ${com.dipesh.ai.studio.Calc.format(skill.amount)} for ${skill.note}.") { expenseStore.add(skill.amount, skill.note) }
+            is LocalSkills.Skill.Spend -> localCommand(t, "Noted: Rs ${com.dipesh.ai.studio.Calc.format(skill.amount)} for ${skill.note}.") { expenseStore.add(skill.amount, skill.note); award(Ev.EXPENSE) }
             is LocalSkills.Skill.SpendSummary -> localCommand(t, Expenses.summarize(expenseStore.load(), skill.period, now)) {}
             LocalSkills.Skill.Battery -> {
                 val (pct, charging) = batteryInfo()
@@ -647,7 +682,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     fun toggleTask(id: Long) {
         val i = tasks.indexOfFirst { it.id == id }
-        if (i >= 0) { tasks[i] = tasks[i].copy(done = !tasks[i].done); saveTasks(); if (tasks[i].done) WidgetBus.post("celebrate") }
+        if (i >= 0) { tasks[i] = tasks[i].copy(done = !tasks[i].done); saveTasks(); if (tasks[i].done) { WidgetBus.post("celebrate"); award(Ev.TASK) } }
     }
 
     fun deleteTask(id: Long) { tasks.removeAll { it.id == id }; saveTasks() }

@@ -109,3 +109,88 @@ class LocalSkillsTest {
         }
     }
 }
+
+class MoreSkillsTest {
+    private fun rnd(seed: Long = 1) = java.util.Random(seed)
+    private fun ans(s: String) = (LocalSkills.parse(s, rnd()) as? Skill.Answer)
+
+    @Test fun shoppingList() {
+        assertEquals(listOf("milk", "rice"), (LocalSkills.parse("add milk and rice to my shopping list") as Skill.ShopAdd).items)
+        assertEquals(listOf("eggs", "bread", "tea"), (LocalSkills.parse("please add eggs, bread and tea to the grocery list") as Skill.ShopAdd).items)
+        assertEquals(listOf("sugar"), (LocalSkills.parse("shopping list add some sugar") as Skill.ShopAdd).items)
+        assertEquals("milk", (LocalSkills.parse("remove milk from my shopping list") as Skill.ShopRemove).item)
+        assertTrue(LocalSkills.parse("what's on my shopping list") is Skill.ShopShow)
+        assertTrue(LocalSkills.parse("shopping list") is Skill.ShopShow)
+        assertTrue(LocalSkills.parse("clear my shopping list") is Skill.ShopClear)
+        assertNull(LocalSkills.parse("add a reminder to call mom"))
+        assertNull(LocalSkills.parse("add 2 and 3"))
+    }
+
+    @Test fun shoppingMaths() {
+        val a = Shopping.add(listOf("milk"), listOf("Milk", "rice"))
+        assertEquals(listOf("milk", "rice"), a)
+        assertEquals(listOf("milk") to true, Shopping.remove(a, "rice"))
+        assertEquals(listOf("milk", "rice") to false, Shopping.remove(a, "gold"))
+        assertEquals("Your shopping list is empty.", Shopping.describe(emptyList()))
+        assertEquals("Your shopping list has 3 items: a, b and c.", Shopping.describe(listOf("a", "b", "c")))
+    }
+
+    @Test fun funSkills() {
+        assertTrue(ans("flip a coin")!!.reply in listOf("Heads!", "Tails!"))
+        assertTrue(Regex("You rolled a [1-6]\\.").matches(ans("roll a dice")!!.reply))
+        assertTrue(Regex("You rolled a ([1-9]|1\\d|20)\\.").matches(ans("roll a 20 sided die")!!.reply))
+        val n = Regex("(\\d+)").find(ans("random number between 5 and 8")!!.reply)!!.value.toInt()
+        assertTrue(n in 5..8)
+        val n2 = Regex("(\\d+)").find(ans("random number between 8 and 5")!!.reply)!!.value.toInt()
+        assertTrue(n2 in 5..8)
+        assertTrue(ans("pick between pizza or burger")!!.reply in listOf("I pick pizza.", "I pick burger."))
+        val j = ans("tell me a joke")!!; assertEquals("laugh", j.event); assertTrue(j.reply.length > 20)
+        assertNull(LocalSkills.parse("what is a coin"))
+    }
+
+    @Test fun nepaliAndHindiPhrases() {
+        assertEquals(300, (LocalSkills.parse("५ मिनेट टाइमर") as Skill.Timer).seconds)
+        assertEquals(600, (LocalSkills.parse("टाइमर 10 मिनट") as Skill.Timer).seconds)
+        val f = LocalSkills.parse("२५ मिनेट फोकस") as Skill.Timer
+        assertTrue(f.focus); assertEquals(1500, f.seconds)
+        assertEquals(7200, (LocalSkills.parse("2 घण्टा टाइमर") as Skill.Timer).seconds)
+        assertTrue(LocalSkills.parse("सुप्रभात") is Skill.Briefing)
+        assertTrue(LocalSkills.parse("शुभ प्रभात") is Skill.Briefing)
+        assertTrue(LocalSkills.parse("बैटरी कति छ") is Skill.Battery)
+        assertTrue(LocalSkills.parse("बैटरी कितनी है") is Skill.Battery)
+    }
+
+    @Test fun levelsAndXp() {
+        assertEquals(1, Progress.level(0)); assertEquals(1, Progress.level(39)); assertEquals(2, Progress.level(40)); assertEquals(3, Progress.level(160))
+        assertEquals(0f, Progress.fraction(0), 1e-6f); assertEquals(0.5f, Progress.fraction(20), 1e-6f)
+        assertEquals("Snow Pup", Progress.title(1)); assertEquals("Yeti Legend", Progress.title(99))
+        var (s, up) = Progress.record(ProgressState(), Ev.TASK, 100L)
+        assertEquals(10, s.xp); assertEquals(1, s.tasks); assertFalse(up)
+        s = ProgressState(xp = 35); val r = Progress.record(s, Ev.FOCUS, 100L)
+        assertTrue(r.second); assertEquals(1, r.first.focus)
+    }
+
+    @Test fun streaks() {
+        var s = ProgressState()
+        s = Progress.record(s, Ev.COMMAND, 10L).first; assertEquals(1, s.streak)
+        s = Progress.record(s, Ev.COMMAND, 10L).first; assertEquals(1, s.streak)   // same day
+        s = Progress.record(s, Ev.COMMAND, 11L).first; assertEquals(2, s.streak)
+        s = Progress.record(s, Ev.COMMAND, 12L).first; assertEquals(3, s.streak)
+        assertTrue(Progress.earned(s).any { it.id == "streak_3" })
+        s = Progress.record(s, Ev.COMMAND, 20L).first; assertEquals(1, s.streak)   // gap resets
+    }
+
+    @Test fun badgesAndStorageFormat() {
+        val s = ProgressState(xp = 500, tasks = 10, focus = 1, commands = 60, expenses = 5, streak = 7)
+        val ids = Progress.earned(s).map { it.id }
+        assertTrue(ids.containsAll(listOf("first_task", "tasks_10", "focus_1", "talker_50", "saver_5", "streak_3", "streak_7")))
+        assertFalse(ids.contains("focus_10"))
+        assertEquals(s, Progress.fromJson(Progress.toJson(s)))
+        assertEquals(ProgressState(), Progress.fromJson("garbage"))
+    }
+
+    @Test fun yetiLaughsOnEvent() {
+        val b = YetiBrain(java.util.Random(1)); b.tick(0.05f, 1000, PetInput(), Pose())
+        b.react("laugh", 9L); assertEquals(Act.LAUGH, b.act)
+    }
+}

@@ -12,7 +12,11 @@ object LocalSkills {
     enum class Period { TODAY, YESTERDAY, WEEK, MONTH, ALL }
 
     sealed class Skill {
-        class Answer(val reply: String) : Skill()
+        class Answer(val reply: String, val event: String? = null) : Skill()
+        class ShopAdd(val items: List<String>) : Skill()
+        class ShopRemove(val item: String) : Skill()
+        object ShopShow : Skill()
+        object ShopClear : Skill()
         class Timer(val seconds: Int, val focus: Boolean) : Skill()
         object CancelTimer : Skill()
         object TimerLeft : Skill()
@@ -22,15 +26,69 @@ object LocalSkills {
         object Battery : Skill()
     }
 
-    fun parse(text: String): Skill? {
-        val t = text.trim().lowercase().trimEnd('.', '!', '?', ',', ';').replace(Regex("\\s+"), " ")
+    private fun normalise(text: String): String {
+        // Devanagari digits -> 0-9 so Nepali and Hindi numbers work in every pattern
+        val sb = StringBuilder(text.length)
+        for (ch in text) sb.append(if (ch in '\u0966'..'\u096F') ('0' + (ch - '\u0966')) else ch)
+        return sb.toString().trim().lowercase().trimEnd('.', '!', '?', ',', ';', '।').replace(Regex("\\s+"), " ")
+    }
+
+    fun parse(text: String, rnd: java.util.Random = java.util.Random()): Skill? {
+        val t = normalise(text)
         if (t.length < 3) return null
+        shopping(t)?.let { return it }
+        fun2(t, rnd)?.let { return it }
         timer(t)?.let { return it }
         spending(t)?.let { return it }
-        if (Regex("^(good (morning|afternoon|evening)( dipesh)?|(my )?(daily|morning|evening) (briefing|brief|summary)|brief me|what'?s my day|my day|today'?s (briefing|summary|plan))$").containsMatchIn(t)) return Skill.Briefing
-        if (Regex("battery (level|percent|percentage|status|left|remaining)|how much battery|charge (left|remaining)|is (my )?(phone )?charging").containsMatchIn(t)) return Skill.Battery
+        if (Regex("^(सुप्रभात|शुभ प्रभात|शुभ दिन|शुभ संध्या|शुभ साँझ|good (morning|afternoon|evening)( dipesh)?|(my )?(daily|morning|evening) (briefing|brief|summary)|brief me|what'?s my day|my day|today'?s (briefing|summary|plan))$").containsMatchIn(t)) return Skill.Briefing
+        if (Regex("battery (level|percent|percentage|status|left|remaining|kati)|how much battery|charge (left|remaining)|is (my )?(phone )?charging|(बैटरी|ब्याट्री|बैट्री).{0,12}(कति|कितनी|कितना|लेवल|प्रतिशत|कितने)").containsMatchIn(t)) return Skill.Battery
         convert(t)?.let { return Skill.Answer(it) }
         calc(t)?.let { return Skill.Answer(it) }
+        return null
+    }
+
+    // ------------------------------------------------------------ shopping list
+    private fun splitItems(raw: String): List<String> =
+        raw.split(Regex("\\s*(?:,|&|\\band\\b|\\bplus\\b)\\s*")).map { it.trim().removePrefix("some ").removePrefix("a ").removePrefix("an ").removePrefix("the ").trim() }.filter { it.isNotEmpty() }.map { it.take(40) }.take(20)
+
+    private fun shopping(t: String): Skill? {
+        val list = "(?:my |the |our )?(?:shopping|grocery|groceries|buy|to-?buy)\\s*list"
+        if (Regex("^(?:please )?(?:clear|empty|delete|reset)\\s+$list$").containsMatchIn(t)) return Skill.ShopClear
+        Regex("^(?:please )?(?:remove|delete|cross off|check off|tick off|got|bought)\\s+(.+?)\\s+(?:from|off|on)\\s+$list$").find(t)?.let { return Skill.ShopRemove(it.groupValues[1].trim()) }
+        Regex("^(?:please )?(?:add|put|buy|get me|i need)\\s+(.+?)\\s+(?:to|on|in|onto)\\s+$list$").find(t)?.let { m -> splitItems(m.groupValues[1]).takeIf { it.isNotEmpty() }?.let { return Skill.ShopAdd(it) } }
+        Regex("^(?:please )?$list\\s+(?:add|put)\\s+(.+)$").find(t)?.let { m -> splitItems(m.groupValues[1]).takeIf { it.isNotEmpty() }?.let { return Skill.ShopAdd(it) } }
+        if (Regex("^(?:what'?s|what is|show|read|tell me|open|check)?\\s*(?:what'?s on |what is on |me )?$list$|(?:what'?s|what is|what do i have).{0,14}$list").containsMatchIn(t)) return Skill.ShopShow
+        return null
+    }
+
+    // ------------------------------------------------------------ small fun skills
+    private val jokes = listOf(
+        "Why don't scientists trust atoms? Because they make up everything.",
+        "I told my phone I needed space. Now it won't stop showing me ads for rockets.",
+        "Why did the computer go to the doctor? It had a virus.",
+        "What do you call a bear with no teeth? A gummy bear.",
+        "Why was the math book sad? It had too many problems.",
+        "I would tell you a construction joke, but I'm still working on it.",
+        "Why did the Yeti cross the road? To prove he was not a myth.",
+        "What did the router say to the modem? You complete me, but you're always slow."
+    )
+
+    private fun fun2(t: String, rnd: java.util.Random): Skill? {
+        if (Regex("^(?:please )?(?:flip|toss) (?:a )?coin$|^heads or tails$").containsMatchIn(t)) return Skill.Answer(if (rnd.nextBoolean()) "Heads!" else "Tails!")
+        Regex("^(?:please )?roll (?:a |an )?(?:(\\d{1,3})[- ]?sided )?(?:dice|die)$").find(t)?.let {
+            val sides = it.groupValues[1].toIntOrNull()?.coerceIn(2, 1000) ?: 6
+            return Skill.Answer("You rolled a ${rnd.nextInt(sides) + 1}.")
+        }
+        Regex("^(?:pick |give me |choose )?(?:a )?random number(?: between (\\d+) and (\\d+))?$").find(t)?.let {
+            val a = it.groupValues[1].toIntOrNull() ?: 1; val b = it.groupValues[2].toIntOrNull() ?: 100
+            val lo = minOf(a, b); val hi = maxOf(a, b)
+            return Skill.Answer("Your number is ${lo + rnd.nextInt(hi - lo + 1)}.")
+        }
+        Regex("^(?:please )?(?:pick|choose|decide) (?:between )?(.+?) (?:or|and) (.+)$").find(t)?.let {
+            val a = it.groupValues[1].trim(); val b = it.groupValues[2].trim()
+            if (a.length in 1..40 && b.length in 1..40 && !a.contains(" or ") ) return Skill.Answer("I pick ${if (rnd.nextBoolean()) a else b}.")
+        }
+        if (Regex("^(?:please )?(?:tell me |say |crack )?(?:a |another )?joke$|^make me laugh$").containsMatchIn(t)) return Skill.Answer(jokes[rnd.nextInt(jokes.size)], "laugh")
         return null
     }
 
@@ -42,17 +100,17 @@ object LocalSkills {
     private fun number(s: String): Double? = s.trim().toDoubleOrNull() ?: words[s.trim()]
 
     private fun timer(t: String): Skill? {
-        if (Regex("(cancel|stop|clear|end|turn off|abort).{0,14}(timer|countdown|focus|pomodoro)").containsMatchIn(t)) return Skill.CancelTimer
+        if (Regex("(cancel|stop|clear|end|turn off|abort).{0,14}(timer|countdown|focus|pomodoro|टाइमर)").containsMatchIn(t)) return Skill.CancelTimer
         if (Regex("(how much time|time left|how long|how many minutes).{0,18}(timer|left|remaining|focus)|timer status|focus status").containsMatchIn(t)) return Skill.TimerLeft
-        val focus = Regex("\\b(focus|pomodoro|study session|deep work)\\b").containsMatchIn(t)
-        val timer = Regex("\\b(timer|countdown)\\b").containsMatchIn(t)
+        val focus = Regex("(focus|pomodoro|study session|deep work|फोकस)").containsMatchIn(t)
+        val timer = Regex("(timer|countdown|टाइमर|टाईमर|taimar)").containsMatchIn(t)
         if (!focus && !timer) return null
         if (Regex("^(what|who|why|how does|explain|tell me about)\\b").containsMatchIn(t) && !Regex("\\d").containsMatchIn(t)) return null
-        val m = Regex("(\\d+(?:\\.\\d+)?|half an|forty five|[a-z]+)\\s*(hours?|hrs?|minutes?|mins?|seconds?|secs?)\\b").find(t)
+        val m = Regex("(\\d+(?:\\.\\d+)?|half an|forty five|[a-z]+)\\s*(hours?|hrs?|घण्टा|घंटा|घण्टे|ghanta|minutes?|mins?|मिनेट|मिनट|मिनिट|minet|seconds?|secs?|सेकेन्ड|सेकंड)").find(t)
         val seconds: Int? = m?.let {
             val n = number(it.groupValues[1]) ?: return@let null
             val unit = it.groupValues[2]
-            (n * when { unit.startsWith("h") -> 3600.0; unit.startsWith("m") -> 60.0; else -> 1.0 }).toInt()
+            (n * when { unit.startsWith("h") || unit.startsWith("घ") || unit.startsWith("g") -> 3600.0; unit.startsWith("m") || unit.startsWith("म") -> 60.0; else -> 1.0 }).toInt()
         }
         val s = seconds ?: if (focus) 25 * 60 else return null
         if (s !in 1..86_400) return null
@@ -217,4 +275,29 @@ class ExpenseStore(private val ctx: android.content.Context) {
         val list = (load() + Expense(now, amount, note)).takeLast(2000)
         p.edit().putString("list", Expenses.toJson(list)).apply()
     }
+}
+
+/** Shopping list maths (the phone-side storage is [ShoppingStore]). */
+object Shopping {
+    fun add(list: List<String>, items: List<String>): List<String> {
+        val out = list.toMutableList()
+        items.forEach { i -> if (out.none { it.equals(i, true) }) out.add(i) }
+        return out
+    }
+    fun remove(list: List<String>, item: String): Pair<List<String>, Boolean> {
+        val key = item.trim().lowercase()
+        val hit = list.firstOrNull { it.equals(key, true) } ?: list.firstOrNull { it.lowercase().contains(key) || key.contains(it.lowercase()) }
+        return if (hit == null) list to false else list.filter { it != hit } to true
+    }
+    fun describe(list: List<String>): String = when {
+        list.isEmpty() -> "Your shopping list is empty."
+        list.size == 1 -> "Your shopping list has one item: ${list[0]}."
+        else -> "Your shopping list has ${list.size} items: " + list.dropLast(1).joinToString(", ") + " and " + list.last() + "."
+    }
+}
+
+class ShoppingStore(private val ctx: android.content.Context) {
+    private val p get() = ctx.getSharedPreferences("shopping", android.content.Context.MODE_PRIVATE)
+    fun load(): List<String> = try { val a = org.json.JSONArray(p.getString("items", "[]")); (0 until a.length()).map { a.getString(it) } } catch (_: Exception) { emptyList() }
+    fun save(list: List<String>) { p.edit().putString("items", org.json.JSONArray(list.take(200)).toString()).apply() }
 }

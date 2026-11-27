@@ -10,6 +10,9 @@ object FeatureCatalog {
     val all = listOf(
         Feature("Talk & listen", "🎙", "Voice chat", "Talk hands-free; say \"Hey Dipesh\" while the mic is on", "chat"),
         Feature("Talk & listen", "⚡", "Offline smart skills", "Say: what is 15% of 2400, convert 5 km to miles, set a timer for 10 minutes, I spent 500 on lunch, good morning (daily briefing), battery level", "chat"),
+        Feature("Talk & listen", "🛒", "Voice shopping list", "Say: add milk and rice to my shopping list, what is on my shopping list, remove milk", "chat"),
+        Feature("Talk & listen", "🎲", "Fun & games", "Say: flip a coin, roll a dice, pick between pizza or burger, tell me a joke", "chat"),
+        Feature("Talk & listen", "🏆", "Yeti levels & badges", "Earn XP, a daily streak and badges for finishing tasks, focus sessions and using the assistant", "chat"),
         Feature("Talk & listen", "🎯", "Focus mode", "Say: start focus 25 minutes. The Yeti sits quietly and celebrates when you finish", "chat"),
         Feature("Talk & listen", "🗣", "Natural Gemini voices", "30 human-sounding voices with emotional delivery; falls back to the phone voice", "settings"),
         Feature("Talk & listen", "🐾", "Floating Yeti pet", "A tiny animated Yeti on your screen: tap to talk, drag to move, it sleeps and wakes", "settings"),

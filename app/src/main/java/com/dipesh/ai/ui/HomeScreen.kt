@@ -7,6 +7,11 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -309,6 +314,32 @@ private fun HudPanels(vm: AssistantViewModel, onNavigate: (String) -> Unit) {
         }
         Spacer(Modifier.height(10.dp))
     }
+    run {
+        val lvl = com.dipesh.ai.studio.Progress.level(vm.progress.xp)
+        val earned = com.dipesh.ai.studio.Progress.earned(vm.progress)
+        HoloPanel(Modifier.fillMaxWidth()) {
+            HoloLabel("YETI LEVEL")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Lv $lvl", style = MaterialTheme.typography.headlineSmall, color = c.cyan)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(com.dipesh.ai.studio.Progress.title(lvl), style = MaterialTheme.typography.bodyMedium, color = c.text)
+                    Text("${vm.progress.xp} XP  ·  ${vm.progress.streak}-day streak", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            val frac = com.dipesh.ai.studio.Progress.fraction(vm.progress.xp)
+            Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(c.glassBorderLo)) {
+                Box(Modifier.fillMaxWidth(frac.coerceAtLeast(0.02f)).height(6.dp).background(Brush.horizontalGradient(listOf(c.cyan, c.violet))))
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                if (earned.isEmpty()) "Finish tasks, focus sessions and daily use to earn badges." else earned.joinToString("  ") { it.icon + " " + it.name },
+                style = MaterialTheme.typography.bodySmall, color = c.textMuted
+            )
+        }
+    }
+    Spacer(Modifier.height(10.dp))
     HoloPanel(Modifier.fillMaxWidth()) {
         HoloLabel("SYSTEM STATUS")
         HudLine("AI core", if (keyReady) "Ready · ${settings.provider}" else "Add API key in Settings", keyReady)

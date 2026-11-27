@@ -1,4 +1,4 @@
-# DIPESH AI 3.4.0 - Feature status (honest report)
+# DIPESH AI 3.5.0 - Feature status (honest report)
 
 **How to read this.** "CI-verified" means the code compiles in GitHub Actions and, where noted, is covered by automated unit tests that passed in the same run. **Nothing has been tested on a physical Android device by the developer tooling used to build this**, so every screen, permission flow, voice feature and network call needs a real-phone check by you. Features are not marked "works" unless noted.
 
@@ -61,3 +61,14 @@ API keys, GitHub token and secrets are encrypted with the Android Keystore. Expo
 - **3D holographic stage on Home**: glowing "DIPESH AI ASSISTANT" title with moving light gradient; the avatar orb sits inside three tilted energy rings that pass behind and in front of it (real perspective maths, depth-sorted); 84 depth-faded particles; perspective lab-floor grid; data streams with moving packets; 8 orbiting feature icons; light sweep; camera parallax from phone tilt (accelerometer) plus horizontal finger drag that springs back; startup sequence (rings snap open, particles fly out, flash) plays once per app launch. Rings, glow and streams react to listening (mic level), thinking (faster dashed rings), speaking (speech loudness).
 - **Honest limits**: this is Compose Canvas pseudo-3D (projection maths, additive glows), not Unreal Engine 5, not ray-traced, not a 4K render. Target is smooth animation (it redraws every frame), but frame rate on a Redmi 12 is unmeasured. Reflections/shadows are painted approximations.
 - **Voice input diagnostics**: the screen now shows a live "Hearing: ..." transcript, spells out errors (e.g. no internet for speech recognition, language not downloaded), and falls back from Nepali to Hindi to English when the phone's recogniser lacks the language.
+
+## Added in 3.5.0 (compile- and unit-test-verified only; NOT tested on a physical device)
+Offline smart skills: understood from speech or typing before the AI is asked, so they work with no internet or API key and use no AI quota. English phrasing only for now.
+- **Calculator**: "what is 25 times 4", "15 percent of 2400", "2 to the power of 10".
+- **Unit converter**: "convert 5 km to miles", "100 celsius in fahrenheit" (length, mass, volume, speed, temperature, data).
+- **Timers**: "set a timer for 10 minutes", cancel, time left. Timers of a minute or more also schedule a backup notification (inexact alarm, may fire a little late); timers under a minute exist only while the app process is alive.
+- **Focus Mode**: "start focus 25 minutes". The Home screen shows a countdown, the floating Yeti sits quietly instead of wandering, and celebrates with a spoken message when done.
+- **Spoken expense tracker**: "I spent 500 on lunch", "how much did I spend this week". Amounts are shown as "Rs"; stored privately on the phone; no export screen yet (CSV maths exists in code only).
+- **Daily briefing**: "good morning" / "daily briefing" reads date, weather (needs the city set in Settings and internet; otherwise skipped), open tasks, today's spending and a low-battery warning.
+- **Battery status**: "battery level".
+- Known limits: patterns are matched literally, so unusual wording falls through to the AI; Nepali/Hindi phrasing is not matched offline yet.

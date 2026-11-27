@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -87,6 +88,7 @@ fun HomeScreen(
                     Modifier.weight(1f).fillMaxSize().verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    GlowTitle(Modifier.padding(top = 10.dp))
                     Header(settings.userName, settings.language, vm.status, online)
                     OrbPanel(vm, minOf(maxH * 0.55f, 380.dp), requestMic, haptic)
                 }
@@ -100,6 +102,7 @@ fun HomeScreen(
                 Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                GlowTitle(Modifier.padding(top = 10.dp))
                 Header(settings.userName, settings.language, vm.status, online)
                 OrbPanel(vm, minOf(maxW * 0.72f, 300.dp), requestMic, haptic)
                 Column(Modifier.fillMaxWidth()) { ContentPanel(vm, onOpenChat, onOpenConversation, haptic, settings.quickCommands, onNavigate) }
@@ -157,7 +160,7 @@ private fun OrbPanel(vm: AssistantViewModel, orbSize: Dp, requestMic: (() -> Uni
     val c = LocalDipeshColors.current
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Spacer(Modifier.height(8.dp))
-        AiOrb(vm.status, vm.level, Modifier.size(orbSize))
+        HoloStage(vm.status, vm.level, Modifier.fillMaxWidth().aspectRatio(1.04f)) { AiOrb(vm.status, vm.level, Modifier.fillMaxSize()) }
         Text(
             vm.hint, style = MaterialTheme.typography.bodyMedium, color = c.textMuted, textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)

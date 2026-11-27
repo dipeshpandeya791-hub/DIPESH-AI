@@ -61,5 +61,13 @@ object ApiClient {
             .create(ClaudeApi::class.java)
     }
 
+    /** Opens the TLS connection to Gemini ahead of the first question so the reply starts sooner. */
+    fun prewarm() {
+        try {
+            val req = okhttp3.Request.Builder().url("https://generativelanguage.googleapis.com/").head().build()
+            okHttp.newCall(req).execute().close()
+        } catch (_: Exception) { /* offline is fine; the real call will report it */ }
+    }
+
     fun jsonBody(json: String): RequestBody = json.toRequestBody(jsonType)
 }

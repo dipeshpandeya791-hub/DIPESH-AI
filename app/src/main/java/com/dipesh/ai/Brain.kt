@@ -169,7 +169,7 @@ class Brain(private val store: Store, private val tools: Tools) {
                 lastBody = r.errorBody()?.string().orEmpty()
                 val busy = lastCode == 429 || lastCode == 500 || lastCode == 502 || lastCode == 503 || lastCode == 504
                 if (!busy) break
-                delay(1500L * (attempt + 1))
+                delay(700L * (attempt + 1))
             }
             if (lastCode == 400 || lastCode == 401 || lastCode == 403) break
         }

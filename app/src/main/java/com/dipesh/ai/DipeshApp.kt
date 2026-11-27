@@ -24,6 +24,7 @@ class DipeshApp : Application() {
         db = AppDatabase.build(this)
         settings = SettingsRepository(this, appScope)
         store = Store(settings, db)
+        appScope.launch(Dispatchers.IO) { com.dipesh.ai.net.ApiClient.prewarm() }
         appScope.launch(Dispatchers.IO) { LegacyMigration.run(this@DipeshApp, settings, db) }
     }
 }

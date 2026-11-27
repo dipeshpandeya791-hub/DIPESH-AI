@@ -23,6 +23,8 @@ import java.util.Locale
 class Brain(private val store: Store, private val tools: Tools) {
     /** Active persona mode; set by the view model when the user says "Boss mode" etc. */
     @Volatile var mode: Persona.Mode = Persona.Mode.NORMAL
+    /** How the user seemed to feel in their latest message; shapes the tone of the next reply. */
+    @Volatile var mood: Persona.Mood = Persona.Mood.NEUTRAL
 
     data class Result(val text: String, val isError: Boolean = false)
 
@@ -337,7 +339,8 @@ class Brain(private val store: Store, private val tools: Tools) {
         return buildString {
             append("You are DIPESH AI, a personal voice assistant living on the user's Android phone. ")
             append(persona).append(' ')
-            append(Persona.core).append(Persona.modeBlock(mode))
+            append(Persona.core).append(Persona.modeBlock(mode)).append(Persona.moodBlock(mood))
+            append("Emotional intelligence: notice feelings behind words, read between the lines, remember what matters to the user, and respond like a caring, perceptive friend. Reason carefully before answering hard questions, and say when you are unsure instead of guessing. ")
             if (s.userName.isNotBlank()) append("The user's name is ${s.userName}. ")
             append("Replies are often spoken aloud, so prefer 1-4 short sentences; use markdown lists or code blocks only when they really help. ")
             append("Use your tools to act on the phone and fetch live information instead of guessing. ")

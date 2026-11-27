@@ -292,6 +292,13 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         hint = "Thinking…"
         val history = db.messages().list(id).map { ChatMsg(it.role, it.text) }
         val last = history.lastOrNull()?.text.orEmpty()
+        val mood = Persona.mood(last)
+        brain.mood = mood
+        when (mood) {
+            Persona.Mood.SAD, Persona.Mood.STRESSED, Persona.Mood.TIRED -> WidgetBus.post("comfort")
+            Persona.Mood.HAPPY -> WidgetBus.post("celebrate")
+            else -> {}
+        }
         val local = if (image == null) runCatching { tools.local(last) }.getOrNull() else null
         val result = if (local != null) Brain.Result(local) else brain.reply(history, image) { streamingText = it }
         db.messages().insert(

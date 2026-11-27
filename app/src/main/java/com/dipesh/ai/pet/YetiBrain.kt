@@ -156,6 +156,7 @@ class YetiBrain(private val rnd: java.util.Random = java.util.Random(), private 
             "celebrate" -> start(Act.CELEBRATE, 3.2f)
             "error" -> start(Act.CONFUSED, 2.4f)
             "laugh" -> start(Act.LAUGH, 2.6f)
+            "comfort" -> start(Act.SAD, 3.4f)
         }
     }
 

@@ -35,6 +35,18 @@ class HoloTest {
 }
 
 class PersonaTest {
+    @Test fun moods() {
+        assertEquals(Persona.Mood.SAD, Persona.mood("I'm sad today"))
+        assertEquals(Persona.Mood.SAD, Persona.mood("मन भारी छ"))
+        assertEquals(Persona.Mood.STRESSED, Persona.mood("I am so stressed about exams"))
+        assertEquals(Persona.Mood.TIRED, Persona.mood("I'm tired"))
+        assertEquals(Persona.Mood.ANGRY, Persona.mood("this is so frustrating, I'm angry"))
+        assertEquals(Persona.Mood.HAPPY, Persona.mood("Great news, I passed!"))
+        assertEquals(Persona.Mood.NEUTRAL, Persona.mood("what time is it"))
+        assertTrue(Persona.moodBlock(Persona.Mood.NEUTRAL).isEmpty())
+        assertTrue(Persona.moodBlock(Persona.Mood.SAD).contains("sad"))
+    }
+
     @Test fun modes() {
         assertEquals(Persona.Mode.BOSS, Persona.detect("Boss mode"))
         assertEquals(Persona.Mode.BOSS, Persona.detect("be brief"))

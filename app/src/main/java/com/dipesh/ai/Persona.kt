@@ -32,6 +32,32 @@ object Persona {
         return text.count { it in 'ऀ'..'ॿ' } * 2 > letters
     }
 
+    enum class Mood { NEUTRAL, SAD, STRESSED, TIRED, ANGRY, HAPPY }
+
+    private val moodWords: List<Pair<Mood, List<String>>> = listOf(
+        Mood.SAD to listOf("i'm sad", "im sad", "feel sad", "feeling sad", "depressed", "lonely", "heartbroken", "i feel low", "crying", "i miss ", "dukhi", "dukhi chu", "udas", "mann bhari", "रोइरहेको", "दुखी", "उदास", "अकेला", "अकेली", "मन भारी", "रो रहा", "रो रही"),
+        Mood.STRESSED to listOf("stressed", "anxious", "anxiety", "panic", "overwhelmed", "so much pressure", "worried", "i'm scared", "im scared", "tension", "चिन्ता", "डर लाग", "तनाव", "घबरा", "टेंशन"),
+        Mood.TIRED to listOf("i'm tired", "im tired", "so tired", "exhausted", "burned out", "burnt out", "can't sleep", "cant sleep", "थाकेको", "थकान", "थक गया", "थक गई", "निद्रा लागेन", "नींद नहीं"),
+        Mood.ANGRY to listOf("i'm angry", "im angry", "so angry", "furious", "pissed", "i hate this", "frustrated", "रिस उठ", "गुस्सा", "झुँझला", "चिढ़"),
+        Mood.HAPPY to listOf("i'm happy", "im happy", "so happy", "i did it", "i passed", "i got the job", "great news", "good news", "i won", "excited", "खुशी", "खुश छु", "खुश हूँ", "पास भए", "पास हो गया", "जित्यो", "जीत गया")
+    )
+
+    /** Rough emotional read of what the user just said (keywords, English/Nepali/Hindi). NEUTRAL when unsure. */
+    fun mood(text: String): Mood {
+        val t = text.lowercase()
+        return moodWords.firstOrNull { (_, words) -> words.any { t.contains(it) } }?.first ?: Mood.NEUTRAL
+    }
+
+    /** Extra guidance for this one turn, based on how the user seems to feel. Empty for neutral. */
+    fun moodBlock(m: Mood): String = when (m) {
+        Mood.NEUTRAL -> ""
+        Mood.SAD -> "EMOTION CUE: the user sounds sad. First acknowledge the feeling in one warm sentence, do not rush to fix it, then offer one small gentle step or ask what happened. No jokes. "
+        Mood.STRESSED -> "EMOTION CUE: the user sounds stressed or worried. Stay calm and steady, name what they're facing, then break it into one or two small next steps. "
+        Mood.TIRED -> "EMOTION CUE: the user sounds tired. Be soft and brief, suggest rest or the smallest next action, offer to handle things for them. "
+        Mood.ANGRY -> "EMOTION CUE: the user sounds frustrated. Don't argue or lecture; acknowledge it, stay calm, and fix the problem directly and quickly. "
+        Mood.HAPPY -> "EMOTION CUE: the user is happy or celebrating. Share the joy genuinely, congratulate them by name if you know it, and keep the energy up. "
+    }
+
     fun modeBlock(mode: Mode): String = when (mode) {
         Mode.BOSS -> "ACTIVE MODE: Boss Mode. Ultra-brief, sharp, executive, zero fluff. Give the direct answer, decision or action confirmation in 1-2 sentences, with the highest-impact takeaway and a clear next action. "
         Mode.STUDY -> "ACTIVE MODE: Study Mode. Be a clear, patient, encouraging tutor. Explain step by step with simple analogies, real-world examples and key formulas or definitions. After explaining, offer one quick check question or a summary/practice question. "

@@ -94,7 +94,7 @@ class YetiView(
             lastFrame = now
             clock += dt
             val wallMs = System.currentTimeMillis()
-            val input = PetInput(WidgetBus.status(), WidgetBus.level(), WidgetBus.mouth, dragging, wander, sleepWhenIdle)
+            val input = PetInput(WidgetBus.status(), WidgetBus.level(), WidgetBus.mouth, dragging, wander, sleepWhenIdle, WidgetBus.focus)
             if (WidgetBus.eventAt != 0L && wallMs - WidgetBus.eventAt < 4000) brain.react(WidgetBus.event, WidgetBus.eventAt)
             val act = brain.tick(dt, wallMs, input, target)
             pose.approach(target, dt, when (act) { Act.JUMP, Act.SURPRISED, Act.WAKE -> 16f; Act.SLEEP -> 4f; else -> 9f })

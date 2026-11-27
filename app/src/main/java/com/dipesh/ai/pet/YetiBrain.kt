@@ -58,7 +58,8 @@ data class PetInput(
     val mouth: Float = 0f,            // 0..1 loudness of speech, 0 when unknown
     val dragging: Boolean = false,
     val wander: Boolean = true,
-    val sleepWhenIdle: Boolean = true
+    val sleepWhenIdle: Boolean = true,
+    val focus: Boolean = false        // a focus session is running: stay calm and quiet
 )
 
 /**
@@ -125,6 +126,7 @@ class YetiBrain(private val rnd: java.util.Random = java.util.Random(), private 
         wasStatus = input.status
 
         if (!busy) {
+            if (input.focus && act in energetic) start(Act.SIT, 8f)
             if (act == Act.SLEEPY && actTime >= actLength) start(Act.SLEEP, 0f)
             else if (actLength > 0f && actTime >= actLength) next(nowMs, input)
             if (!input.wander && (act == Act.WALK || act == Act.RUN || act == Act.CLIMB)) start(Act.IDLE, 3f)
@@ -156,7 +158,10 @@ class YetiBrain(private val rnd: java.util.Random = java.util.Random(), private 
         }
     }
 
+    private val energetic = setOf(Act.WALK, Act.RUN, Act.JUMP, Act.DANCE, Act.WAVE, Act.CLIMB, Act.LAUGH, Act.SURPRISED, Act.EXCITED)
+
     private fun next(nowMs: Long, input: PetInput) {
+        if (input.focus) { if (rnd.nextInt(3) == 0) start(Act.IDLE, 5f) else start(Act.SIT, 8f + rnd.nextFloat() * 6f); return }
         // weighted random choice of the next idle behaviour; calm things are more likely than energetic ones
         val r = rnd.nextInt(100)
         when {

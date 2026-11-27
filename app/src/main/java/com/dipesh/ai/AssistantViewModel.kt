@@ -16,6 +16,9 @@ import com.dipesh.ai.data.MessageEntity
 import com.dipesh.ai.data.NoteEntity
 import com.dipesh.ai.data.Settings
 import com.dipesh.ai.net.networkFlow
+import com.dipesh.ai.studio.ExpenseStore
+import com.dipesh.ai.studio.Expenses
+import com.dipesh.ai.studio.LocalSkills
 import com.dipesh.ai.studio.ProjectLibrary
 import com.dipesh.ai.studio.TaskItem
 import com.dipesh.ai.studio.TaskRepo
@@ -224,6 +227,7 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         voice.stopSpeaking()
         awaitingCommand = false
         // Holographic display commands work with no AI key and are never sent to the model.
+        LocalSkills.parse(t)?.let { skill -> runSkill(t, skill); return }
         Persona.detect(t)?.let { m ->
             brain.mode = m
             val ack = when (m) {
@@ -304,6 +308,81 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Runs a local action, records the exchange in the chat and speaks the reply (keeps hands-free mode going). */
+
+    // ---------------------------------------------------------------- offline smart skills
+    var timerEndsAt by androidx.compose.runtime.mutableLongStateOf(0L); private set
+    var timerFocus by androidx.compose.runtime.mutableStateOf(false); private set
+    private var timerJob: kotlinx.coroutines.Job? = null
+    private val expenseStore by lazy { ExpenseStore(getApplication()) }
+
+    private fun batteryInfo(): Pair<Int, Boolean> {
+        val i = getApplication<Application>().registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+        val level = i?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = i?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val st = i?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val charging = st == android.os.BatteryManager.BATTERY_STATUS_CHARGING || st == android.os.BatteryManager.BATTERY_STATUS_FULL
+        return (if (level < 0 || scale <= 0) -1 else level * 100 / scale) to charging
+    }
+
+    fun cancelTimer(): Boolean {
+        val was = timerEndsAt > 0L
+        timerJob?.cancel(); timerEndsAt = 0L; WidgetBus.focus = false
+        return was
+    }
+
+    private fun timerDone(focus: Boolean) {
+        timerEndsAt = 0L; WidgetBus.focus = false
+        WidgetBus.post("celebrate")
+        val msg = if (focus) "Focus session complete. Nice work!" else "Time's up!"
+        banner = msg
+        if (status == Status.IDLE || handsFree || voiceConversation) {
+            voice.stopListening(); status = Status.SPEAKING
+            voice.speak(msg) { onSpeechDone() }
+        }
+    }
+
+    private fun runSkill(t: String, skill: LocalSkills.Skill) {
+        val now = System.currentTimeMillis()
+        when (skill) {
+            is LocalSkills.Skill.Answer -> localCommand(t, skill.reply) {}
+            is LocalSkills.Skill.Timer -> {
+                cancelTimer()
+                timerEndsAt = now + skill.seconds * 1000L; timerFocus = skill.focus; WidgetBus.focus = skill.focus
+                val focus = skill.focus
+                if (skill.seconds >= 60) ReminderReceiver.schedule(getApplication(), (skill.seconds + 59) / 60, if (focus) "Focus session finished" else "Timer finished")
+                timerJob = viewModelScope.launch { kotlinx.coroutines.delay(skill.seconds * 1000L); timerDone(focus) }
+                localCommand(t, if (focus) "Focus mode on for ${LocalSkills.durationText(skill.seconds)}. I'll stay quiet with you." else "Timer set for ${LocalSkills.durationText(skill.seconds)}.") {}
+            }
+            LocalSkills.Skill.CancelTimer -> localCommand(t, if (cancelTimer()) "Timer cancelled." else "No timer is running.") {}
+            LocalSkills.Skill.TimerLeft -> {
+                val left = ((timerEndsAt - now) / 1000L).toInt()
+                localCommand(t, if (timerEndsAt > 0L && left > 0) "${LocalSkills.durationText(left)} left." else "No timer is running.") {}
+            }
+            is LocalSkills.Skill.Spend -> localCommand(t, "Noted: Rs ${com.dipesh.ai.studio.Calc.format(skill.amount)} for ${skill.note}.") { expenseStore.add(skill.amount, skill.note) }
+            is LocalSkills.Skill.SpendSummary -> localCommand(t, Expenses.summarize(expenseStore.load(), skill.period, now)) {}
+            LocalSkills.Skill.Battery -> {
+                val (pct, charging) = batteryInfo()
+                localCommand(t, if (pct < 0) "I couldn't read the battery." else LocalSkills.batteryText(pct, charging)) {}
+            }
+            LocalSkills.Skill.Briefing -> {
+                status = Status.THINKING; hint = "Preparing your briefing…"
+                viewModelScope.launch {
+                    val city = store.settings.value.city
+                    val weather = if (city.isBlank()) null else try {
+                        kotlinx.coroutines.withTimeoutOrNull(5000) { kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.dipesh.ai.studio.ApiHub.query("weather", city) } }
+                            ?.lineSequence()?.firstOrNull { it.isNotBlank() }?.take(160)
+                    } catch (_: Exception) { null }
+                    val pct = batteryInfo().first
+                    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                    val date = java.text.SimpleDateFormat("EEEE, d MMMM", java.util.Locale.getDefault()).format(java.util.Date())
+                    val spent = Expenses.inPeriod(expenseStore.load(), LocalSkills.Period.TODAY, now).sumOf { it.amount }
+                    val reply = LocalSkills.briefing(hour, date, tasks.filter { !it.done }.map { it.title }, weather, pct.takeIf { it >= 0 }, spent)
+                    localCommand(t, reply) {}
+                }
+            }
+        }
+    }
+
     private fun localCommand(userText: String, reply: String, action: () -> Unit) {
         action()
         job = viewModelScope.launch {

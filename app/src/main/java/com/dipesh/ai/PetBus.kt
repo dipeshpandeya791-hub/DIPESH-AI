@@ -8,6 +8,8 @@ object WidgetBus {
     @Volatile var onTap: (() -> Boolean)? = null
     /** Loudness 0..1 of what the assistant is saying right now (natural voice); 0 when unknown. */
     @Volatile var mouth: Float = 0f
+    /** True while a focus session runs: the Yeti sits quietly instead of wandering. */
+    @Volatile var focus: Boolean = false
     @Volatile var event: String = ""
     @Volatile var eventAt: Long = 0L
 

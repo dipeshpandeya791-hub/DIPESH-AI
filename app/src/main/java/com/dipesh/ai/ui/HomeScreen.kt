@@ -293,6 +293,22 @@ private fun HudPanels(vm: AssistantViewModel, onNavigate: (String) -> Unit) {
     val keyReady = when (settings.provider) { "gemini" -> settings.geminiKey.isNotBlank(); "claude" -> settings.claudeKey.isNotBlank(); else -> true }
 
     Spacer(Modifier.height(8.dp))
+    if (vm.timerEndsAt > 0L) {
+        var left by remember(vm.timerEndsAt) { mutableStateOf(0) }
+        LaunchedEffect(vm.timerEndsAt) {
+            while (true) {
+                left = ((vm.timerEndsAt - System.currentTimeMillis()) / 1000L).toInt().coerceAtLeast(0)
+                if (left <= 0) break
+                delay(500)
+            }
+        }
+        HoloPanel(Modifier.fillMaxWidth(), onClick = { vm.cancelTimer() }) {
+            HoloLabel(if (vm.timerFocus) "FOCUS MODE" else "TIMER")
+            Text(com.dipesh.ai.studio.LocalSkills.clock(left), style = MaterialTheme.typography.displaySmall, color = c.cyan)
+            Text(if (vm.timerFocus) "The Yeti is sitting quietly with you. Tap to end." else "Tap to cancel.", style = MaterialTheme.typography.bodySmall, color = c.textMuted)
+        }
+        Spacer(Modifier.height(10.dp))
+    }
     HoloPanel(Modifier.fillMaxWidth()) {
         HoloLabel("SYSTEM STATUS")
         HudLine("AI core", if (keyReady) "Ready · ${settings.provider}" else "Add API key in Settings", keyReady)

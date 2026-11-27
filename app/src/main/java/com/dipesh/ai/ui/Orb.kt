@@ -48,7 +48,13 @@ import kotlin.math.sin
 @Composable
 fun rememberTime(): androidx.compose.runtime.FloatState {
     val time = remember { mutableFloatStateOf(0f) }
+    val resolver = androidx.compose.ui.platform.LocalContext.current.contentResolver
     LaunchedEffect(Unit) {
+        // Respect "Remove animations" (animator scale 0): hold a calm still frame instead of looping.
+        val still = try {
+            android.provider.Settings.Global.getFloat(resolver, android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f
+        } catch (_: Exception) { false }
+        if (still) { time.floatValue = 1.5f; return@LaunchedEffect }
         var start = 0L
         while (true) {
             androidx.compose.runtime.withFrameNanos { n ->

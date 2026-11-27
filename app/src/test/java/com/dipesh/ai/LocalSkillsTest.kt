@@ -33,7 +33,7 @@ class LocalSkillsTest {
         assertEquals("5 km is 3.1069 mi.", answer("convert 5 km to mi"))
         assertEquals("5 kilometers is 3.1069 miles.", answer("5 kilometers to miles"))
         assertEquals("100 celsius is 212 fahrenheit.", answer("100 celsius in fahrenheit"))
-        assertEquals("2 kg is 4.4092 pounds.", answer("how many pounds is 2 kg").orEmpty().ifEmpty { "2 kg is 4.4092 pounds." })
+        assertEquals("2 kg is 4.4092 pounds.", answer("2 kg in pounds"))
         assertNull(LocalSkills.parse("10 apples to oranges"))
         assertNull(LocalSkills.parse("5 km to kg"))
     }
@@ -86,7 +86,7 @@ class LocalSkillsTest {
     @Test fun expenseMathAndStorage() {
         val tz = TimeZone.getTimeZone("UTC")
         val day = 86_400_000L
-        val now = 10 * day + 12 * 3_600_000L
+        val now = 40 * day + 12 * 3_600_000L
         val list = listOf(Expense(now - 1000, 300.0, "Lunch"), Expense(now - 2000, 200.0, "lunch"), Expense(now - day, 100.0, "bus"), Expense(now - 20 * day, 999.0, "old"))
         assertEquals(500.0, Expenses.inPeriod(list, Period.TODAY, now, tz).sumOf { it.amount }, 0.0)
         assertEquals(100.0, Expenses.inPeriod(list, Period.YESTERDAY, now, tz).sumOf { it.amount }, 0.0)

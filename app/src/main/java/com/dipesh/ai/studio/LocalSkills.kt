@@ -130,7 +130,7 @@ object LocalSkills {
         return try {
             val v = Calc.eval(e)
             if (v.isNaN() || v.isInfinite()) "That can't be calculated." else "The answer is ${fmt(v)}."
-        } catch (_: Exception) { null }
+        } catch (e: Exception) { if (e.message?.contains("zero", true) == true || e.message?.contains("finite", true) == true) "That can't be calculated." else null }
     }
 
     // ------------------------------------------------------------ battery & briefing text

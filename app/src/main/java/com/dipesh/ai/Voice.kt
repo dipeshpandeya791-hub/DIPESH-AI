@@ -22,6 +22,7 @@ class Voice(private val context: Context) {
 
     var language: String = "en-US"
         set(value) {
+            if (field != value) recognitionOverride = null
             field = value
             applyTts()
         }
@@ -104,7 +105,11 @@ class Voice(private val context: Context) {
      * Listen once. [onHeard] gets the transcript; [onFail] gets a SpeechRecognizer.ERROR_* code (or -1);
      * [onLevel] gets the live microphone level from 0 to 1 for the sound visualizer.
      */
-    fun listen(onHeard: (String) -> Unit, onFail: (Int) -> Unit, onLevel: (Float) -> Unit) {
+    /** Set when the phone cannot recognise [language]; used instead until the language setting changes. */
+    var recognitionOverride: String? = null
+    val recognitionLanguage: String get() = recognitionOverride ?: language
+
+    fun listen(onHeard: (String) -> Unit, onFail: (Int) -> Unit, onLevel: (Float) -> Unit, onPartial: (String) -> Unit = {}) {
         stopListening()
         if (!SpeechRecognizer.isRecognitionAvailable(context)) {
             onFail(-1)
@@ -121,7 +126,10 @@ class Voice(private val context: Context) {
 
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) { rearm(60_000L) }
+            override fun onPartialResults(partialResults: Bundle?) {
+                rearm(60_000L)
+                partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.takeIf { it.isNotBlank() }?.let(onPartial)
+            }
             override fun onEvent(eventType: Int, params: Bundle?) {}
 
             override fun onError(error: Int) {
@@ -140,10 +148,10 @@ class Voice(private val context: Context) {
         })
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, recognitionLanguage)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
             // Auto language: also accept Nepali, Hindi and English so switching mid-chat needs no setting change.
-            putStringArrayListExtra("android.speech.extra.ADDITIONAL_LANGUAGES", ArrayList(listOf("en-US", "hi-IN", "ne-NP").filter { it != language }))
+            putStringArrayListExtra("android.speech.extra.ADDITIONAL_LANGUAGES", ArrayList(listOf("en-US", "hi-IN", "ne-NP").filter { it != recognitionLanguage }))
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1800L)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)

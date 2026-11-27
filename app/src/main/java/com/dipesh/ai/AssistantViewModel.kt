@@ -438,18 +438,20 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun listenOnce() {
         status = Status.LISTENING
-        hint = if (handsFree && !awaitingCommand && !voiceConversation) "Waiting for \"Hey Dipesh\"…" else "Listening…"
+        if (errorStreak < 3) hint = if (handsFree && !awaitingCommand && !voiceConversation) "Waiting for \"Hey Dipesh\"…" else "Listening…"
         voice.listen(
             onHeard = {
                 level = 0f
                 silentRetries = 0
+                errorStreak = 0
                 onHeard(it)
             },
             onFail = {
                 level = 0f
                 onListenError(it)
             },
-            onLevel = { level = it }
+            onLevel = { level = it },
+            onPartial = { if (status == Status.LISTENING) hint = "Hearing: ${it.take(60)}" }
         )
     }
 
@@ -473,7 +475,38 @@ class AssistantViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    private var errorStreak = 0
+
+    private fun errorName(code: Int) = when (code) {
+        SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "network timeout"
+        SpeechRecognizer.ERROR_NETWORK -> "no internet for speech recognition"
+        SpeechRecognizer.ERROR_AUDIO -> "microphone audio error (another app may be using the mic)"
+        SpeechRecognizer.ERROR_SERVER -> "speech server error"
+        SpeechRecognizer.ERROR_CLIENT -> "speech service restarted"
+        SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "speech service busy"
+        SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "microphone permission missing"
+        10 -> "too many requests"
+        11 -> "speech server disconnected"
+        12 -> "this language is not supported for voice input"
+        13 -> "this language is not downloaded for voice input"
+        else -> "code $code"
+    }
+
     private fun onListenError(code: Int) {
+        // Language not supported by the phone's recogniser: fall back to Hindi (understands Devanagari speech), then English, and say so.
+        if (code == 12 || code == 13) {
+            val cur = voice.recognitionLanguage
+            val next = when { cur.startsWith("ne") -> "hi-IN"; cur.startsWith("hi") -> "en-US"; else -> null }
+            if (next != null) {
+                voice.recognitionOverride = next
+                banner = "Voice input for $cur isn't available on this phone. Using $next instead. Install the language in Google app > Settings > Voice > Languages."
+            }
+        }
+        val quietCode = code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+        if (quietCode) errorStreak = 0 else {
+            errorStreak++
+            if (errorStreak >= 3 && (handsFree || voiceConversation)) { banner = "Voice problem: ${errorName(code)}. Still trying…"; hint = "Voice problem: ${errorName(code)}" }
+        }
         val fatal = code == -1 || code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS
         if (fatal) {
             handsFree = false
